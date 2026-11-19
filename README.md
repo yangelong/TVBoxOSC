@@ -1,5 +1,7 @@
 # TVBoxOSC
 
+> 本仓 `master` 只放构建脚本与签名；**源码在 `source` 分支**，CI 直接编译 `source` 分支，不再从上游拉取。
+
 ![Build](https://shields.io/github/actions/workflow/status/o0HalfLife0o/TVBoxOSC/test.yml?branch=master&logo=github&label=Build)
 [![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/TVBoxOSC)
 [![Download](https://img.shields.io/github/v/release/o0HalfLife0o/TVBoxOSC?color=orange&logoColor=orange&label=Download&logo=DocuSign)](https://github.com/o0HalfLife0o/TVBoxOSC/releases/latest) 
@@ -10,3 +12,4 @@ This repo relies on the following third-party projects:
 - [CatVodTVOfficial/TVBoxOSC](https://github.com/CatVodTVOfficial/TVBoxOSC)
 - [q215613905/TVBoxOS](https://github.com/q215613905/TVBoxOS) (Updated: 89ec1b7504426b3ff5e9d0996c3bbf50c9d2eff0)
 - [takagen99/Box](https://github.com/takagen99/Box) (Updated: 258a5fef61578869ae905ca230bdde9e99fc19a8)
+- [yangelong/TVBoxOSC](https://github.com/yangelong/TVBoxOSC) (Updated: 89ec1b7504426b3ff5e9d0996c3bbf50c9d2eff0)
