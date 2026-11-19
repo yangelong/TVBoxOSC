@@ -109,4 +109,6 @@ output-metadata.json
 signing.properties
 keystore.properties
 local.properties
+# 由 tools/export-patches.ps1 生成的补丁目录
+patches/
 # ---- 本地追加结束 ----
