@@ -101,3 +101,12 @@ lint/tmp/
 .temp/
 output-metadata.json
 .py/
+
+# ---- 本地追加：签名与本地构建配置，勿提交 ----
+*.jks
+*.keystore
+*.p12
+signing.properties
+keystore.properties
+local.properties
+# ---- 本地追加结束 ----
