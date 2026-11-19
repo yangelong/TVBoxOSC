@@ -141,7 +141,10 @@ public class VodInfo implements Serializable {
     public boolean isDirectLine(String flag) {
         if (flag == null || seriesMap == null) return false;
         List<VodSeries> list = seriesMap.get(flag);
-        return list != null && !list.isEmpty() && isDirectPlayable(list.get(0).url);
+        if (list == null || list.isEmpty()) return false;
+        if (isDirectPlayable(list.get(0).url)) return true;
+        // 兜底：线路名里带 m3u8 的（如 ffm3u8）视为直连线路
+        return flag.toLowerCase().contains("m3u8");
     }
 
     /** 第一条可直接播放的线路名，没有则返回 null */
