@@ -2,6 +2,10 @@ package com.github.tvbox.osc.bean;
 
 import static com.github.tvbox.osc.util.RegexUtils.getPattern;
 
+import android.text.TextUtils;
+
+import com.github.tvbox.osc.util.DefaultConfig;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -90,7 +94,81 @@ public class VodInfo implements Serializable {
                 }
                 seriesMap.put(flag.name, list);
             }
+
+            // 把可直接播放（直播流/直链）的线路排到前面，需要嗅探的排后面
+            prioritizeDirectLines();
         }
+    }
+
+    /**
+     * 线路排序：能直接播放的（.m3u8/.mp4 等直链、直播流）优先，需要网页嗅探的排后面。
+     * 两类线路内部各自保持源站原有顺序；若全都可以直连或全都需嗅探则不动。
+     */
+    public void prioritizeDirectLines() {
+        if (seriesMap == null || seriesFlags == null || seriesMap.size() < 2) return;
+        List<String> direct = new ArrayList<>();
+        List<String> needSniff = new ArrayList<>();
+        for (String flag : seriesMap.keySet()) {
+            if (isDirectLine(flag)) {
+                direct.add(flag);
+            } else {
+                needSniff.add(flag);
+            }
+        }
+        if (direct.isEmpty() || needSniff.isEmpty()) return;
+
+        LinkedHashMap<String, List<VodSeries>> orderedMap = new LinkedHashMap<>();
+        for (String flag : direct) {
+            orderedMap.put(flag, seriesMap.get(flag));
+        }
+        for (String flag : needSniff) {
+            orderedMap.put(flag, seriesMap.get(flag));
+        }
+
+        ArrayList<VodSeriesFlag> orderedFlags = new ArrayList<>();
+        for (VodSeriesFlag flag : seriesFlags) {
+            if (orderedMap.containsKey(flag.name)) {
+                orderedFlags.add(flag);
+            }
+        }
+        seriesMap = orderedMap;
+        if (orderedFlags.size() == seriesMap.size()) {
+            seriesFlags = orderedFlags;
+        }
+    }
+
+    /** 这条线路是否可以直接播放（不需要嗅探） */
+    public boolean isDirectLine(String flag) {
+        if (flag == null || seriesMap == null) return false;
+        List<VodSeries> list = seriesMap.get(flag);
+        return list != null && !list.isEmpty() && isDirectPlayable(list.get(0).url);
+    }
+
+    /** 第一条可直接播放的线路名，没有则返回 null */
+    public String firstDirectLine() {
+        if (seriesMap == null) return null;
+        for (String flag : seriesMap.keySet()) {
+            if (isDirectLine(flag)) return flag;
+        }
+        return null;
+    }
+
+    /**
+     * 判断这条地址能不能直接交给播放器。
+     * 说明：嗅探线路给出的通常是一个网页地址，直连线路给的是 .m3u8/.mp4 这类流地址。
+     */
+    private boolean isDirectPlayable(String url) {
+        if (TextUtils.isEmpty(url)) return false;
+        if (DefaultConfig.isVideoFormat(url)) return true;
+        String target = url.toLowerCase();
+        if (target.contains("url=")) {
+            try {
+                target = java.net.URLDecoder.decode(url, "UTF-8").toLowerCase();
+            } catch (Throwable ignored) {
+            }
+        }
+        return target.contains(".m3u8") || target.contains(".mp4") || target.contains(".flv")
+                || target.contains(".mkv") || target.contains(".mpd") || target.contains(".mov");
     }
 
     private int extractNumber(String name) {

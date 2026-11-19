@@ -943,6 +943,14 @@ public class DetailActivity extends BaseActivity {
                         if (vodInfo.playFlag == null || !vodInfo.seriesMap.containsKey(vodInfo.playFlag))
                             vodInfo.playFlag = (String) vodInfo.seriesMap.keySet().toArray()[0];
 
+                        // 默认线路若是需要嗅探的，自动改选第一条可直连（直播/直链）线路
+                        if (!vodInfo.isDirectLine(vodInfo.playFlag)) {
+                            String directFlag = vodInfo.firstDirectLine();
+                            if (directFlag != null) {
+                                vodInfo.playFlag = directFlag;
+                            }
+                        }
+
                         restoreDetailFallbackEpisode();
                         resetDetailFallback();
                         List<VodInfo.VodSeries> playingSeriesList = vodInfo.seriesMap.get(vodInfo.playFlag);
