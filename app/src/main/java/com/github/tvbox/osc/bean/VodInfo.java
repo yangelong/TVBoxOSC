@@ -126,9 +126,14 @@ public class VodInfo implements Serializable {
         }
 
         ArrayList<VodSeriesFlag> orderedFlags = new ArrayList<>();
-        for (VodSeriesFlag flag : seriesFlags) {
-            if (orderedMap.containsKey(flag.name)) {
-                orderedFlags.add(flag);
+        // 按排好序的线路顺序重建 flag 列表；按钮（线路 tab）读的是 seriesFlags，
+        // 早先按原顺序遍历会导致 map 已排序但按钮顺序不变
+        for (String key : orderedMap.keySet()) {
+            for (VodSeriesFlag flag : seriesFlags) {
+                if (key.equals(flag.name)) {
+                    orderedFlags.add(flag);
+                    break;
+                }
             }
         }
         seriesMap = orderedMap;

@@ -9,6 +9,7 @@ import com.github.tvbox.osc.callback.LoadingCallback;
 import com.github.tvbox.osc.data.AppDataManager;
 import com.github.tvbox.osc.server.ControlManager;
 import com.github.tvbox.osc.util.AppManager;
+import com.github.tvbox.osc.util.DefaultConfig;
 import com.github.tvbox.osc.util.EpgUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
@@ -66,6 +67,10 @@ public class App extends MultiDexApplication {
         Hawk.init(this).build();
         Hawk.put(HawkConfig.DEBUG_OPEN, false);
         Hawk.put(HawkConfig.PLAYER_IS_LIVE, false);
+        // 默认把点播接口地址填好；用户手动改过（Hawk 里已有值）就不动
+        if (!Hawk.contains(HawkConfig.API_URL)) {
+            Hawk.put(HawkConfig.API_URL, DefaultConfig.DEFAULT_API_URL);
+        }
         if (!Hawk.contains(HawkConfig.PLAY_TYPE)) {
             Hawk.put(HawkConfig.PLAY_TYPE, 2);
         } else if (Hawk.get(HawkConfig.PLAY_TYPE, 2) == 0) {

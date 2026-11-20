@@ -26,6 +26,9 @@ import java.util.regex.Pattern;
  */
 public class DefaultConfig {
 
+    /** 默认点播接口地址：首次安装、或从没手动改过接口时用它 */
+    public static final String DEFAULT_API_URL = "https://tvbox-1255793441.cos.ap-guangzhou.myqcloud.com/fast20.json";
+
     public static List<MovieSort.SortData> adjustSort(String sourceKey, List<MovieSort.SortData> list, boolean withMy) {
         List<MovieSort.SortData> data = new ArrayList<>();
         if (sourceKey != null && list != null) {
