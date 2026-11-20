@@ -117,6 +117,10 @@ public class HomeActivity extends BaseActivity {
     // 切换首页数据源会重建 Activity，所以必须是 static 才不会重新弹密码
     private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理"};
     private static final String PROTECTED_CATEGORY_PASSWORD = "104";
+    /** 需要额外密码才能切换的仓库/数据源名字关键字（多仓时的「国外频道」） */
+    private static final String[] PROTECTED_SOURCE_KEYWORDS = {"国外频道"};
+    /** 切换数据源时左上角显示的提示文字（闪烁） */
+    private static final String SWITCHING_TEXT = "切换中...";
     private static final Set<String> UNLOCKED_PROTECTED_KEYWORDS = new HashSet<>();
     // 当前正在显示的分类密码框；用引用而不是布尔标记，避免对话框被系统回收后标记卡在 true
     private NumericPasswordDialog categoryPasswordDialog = null;
@@ -545,7 +549,6 @@ public class HomeActivity extends BaseActivity {
         homeSortLoading = keepCurrentContent;
         if (keepCurrentContent && home != null && home.getName() != null && !home.getName().isEmpty()) {
             previousHomeName = tvName.getText() == null ? null : tvName.getText().toString();
-            tvName.setText(home.getName());
         }
         tvNameAnimation();
         if (home == null) {
@@ -1128,9 +1131,12 @@ public class HomeActivity extends BaseActivity {
             @Override
             public void click(SourceBean value, int pos) {
                 dismissSiteSwitchDialog();
-                previousHomeSource = ApiConfig.get().getHomeSourceBean();
-                ApiConfig.get().setSourceBean(value);
-                refreshHome(false);
+                if (needPasswordForSource(value)) {
+                    // 多仓下切到「国外频道」这种仓库，要跟伦理一样先输密码
+                    showSourcePasswordDialog(value);
+                    return;
+                }
+                applyHomeSource(value);
             }
             @Override
             public String getDisplay(SourceBean val) {
@@ -1153,6 +1159,57 @@ public class HomeActivity extends BaseActivity {
     private void refreshHome()
     {
         refreshHome(true);
+    }
+
+    /** 多仓（可切换的数据源不止一个）且目标数据源名字命中保护关键字时，切换前要密码 */
+    private boolean needPasswordForSource(SourceBean value) {
+        if (value == null || value.getName() == null) {
+            return false;
+        }
+        List<SourceBean> sites = ApiConfig.get().getSwitchSourceBeanList();
+        if (sites == null || sites.size() <= 1) {
+            // 单仓：不需要密码
+            return false;
+        }
+        SourceBean current = ApiConfig.get().getHomeSourceBean();
+        if (current != null && value.getName().equals(current.getName())
+                && value.getKey() != null && value.getKey().equals(current.getKey())) {
+            return false;
+        }
+        for (String keyword : PROTECTED_SOURCE_KEYWORDS) {
+            if (value.getName().contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void applyHomeSource(SourceBean value) {
+        previousHomeSource = ApiConfig.get().getHomeSourceBean();
+        ApiConfig.get().setSourceBean(value);
+        refreshHome(false);
+    }
+
+    private void showSourcePasswordDialog(final SourceBean value) {
+        if (isActivityUnavailable()) {
+            return;
+        }
+        final NumericPasswordDialog dialog = new NumericPasswordDialog(this, value.getName() + " · 需要密码");
+        dialog.setOnListener(new NumericPasswordDialog.OnListener() {
+            @Override
+            public void onSubmit(String password) {
+                if (PROTECTED_CATEGORY_PASSWORD.equals(password)) {
+                    applyHomeSource(value);
+                } else {
+                    Toast.makeText(HomeActivity.this, "密码错误", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onCancel() {
+            }
+        });
+        dialog.show();
     }
 
     private void refreshHomeSort() {
@@ -1239,6 +1296,18 @@ public class HomeActivity extends BaseActivity {
         sortAdapter.setNewData(DefaultConfig.adjustSort(ApiConfig.get().getHomeSourceBean().getKey(), new ArrayList<>(), true));
         initViewPager(null);
         tvName.clearAnimation();
+        restoreHomeNameText();
+    }
+
+    /** 取消加载后把左上角文字还原成当前数据源名字（不再停在「切换中...」） */
+    private void restoreHomeNameText() {
+        try {
+            SourceBean home = ApiConfig.get().getHomeSourceBean();
+            if (home != null && home.getName() != null && !home.getName().isEmpty()) {
+                tvName.setText(home.getName());
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private void cancelHomeSortLoading() {
@@ -1250,6 +1319,8 @@ public class HomeActivity extends BaseActivity {
         }
         if (previousHomeName != null && !previousHomeName.isEmpty()) {
             tvName.setText(previousHomeName);
+        } else {
+            restoreHomeNameText();
         }
         previousHomeSource = null;
         previousHomeName = null;
@@ -1258,6 +1329,8 @@ public class HomeActivity extends BaseActivity {
     private void tvNameAnimation()
     {
         tvName.clearAnimation();
+        // 切换数据源时不再显示（闪烁的）数据源名字，改成闪烁的「切换中...」提示
+        tvName.setText(SWITCHING_TEXT);
         AlphaAnimation blinkAnimation = new AlphaAnimation(0.0f, 1.0f);
         blinkAnimation.setDuration(500);
         blinkAnimation.setStartOffset(20);

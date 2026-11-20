@@ -34,6 +34,7 @@ import com.github.tvbox.osc.ui.dialog.ApiDialog;
 import com.github.tvbox.osc.ui.dialog.ApiHistoryDialog;
 import com.github.tvbox.osc.ui.dialog.BackupDialog;
 import com.github.tvbox.osc.ui.dialog.DanmuApiDialog;
+import com.github.tvbox.osc.ui.dialog.NumericPasswordDialog;
 import com.github.tvbox.osc.ui.dialog.SearchRemoteTvDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.ui.dialog.XWalkInitDialog;
@@ -74,6 +75,8 @@ import tv.danmaku.ijk.media.player.IjkMediaPlayer;
  */
 public class ModelSettingFragment extends BaseLazyFragment {
     private static final int REQUEST_LOCAL_CONFIG = 1001;
+    /** 与伦理分类共用的密码 */
+    private static final String PROTECTED_API_LINE_PASSWORD = "104";
     private TextView tvDebugOpen;
     private TextView tvMediaCodec;
     private TextView tvParseWebView;
@@ -159,7 +162,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
         tvDns.setText(OkGoHelper.dnsHttpsList.get(Hawk.get(HawkConfig.DOH_URL, 0)));
         tvHomeRec.setText(getHomeRecName(Hawk.get(HawkConfig.HOME_REC, HawkConfig.DEFAULT_HOME_REC)));
         tvHistoryNum.setText(HistoryHelper.getHistoryNumName(Hawk.get(HawkConfig.HISTORY_NUM, 0)));
-        tvHistoryMerge.setText(Hawk.get(HawkConfig.HISTORY_MERGE, false) ? "开启" : "关闭");
+        tvHistoryMerge.setText(Hawk.get(HawkConfig.HISTORY_MERGE, true) ? "开启" : "关闭");
         tvSearchView.setText(getSearchView(Hawk.get(HawkConfig.SEARCH_VIEW, 0)));
         tvHomeApi.setText(ApiConfig.get().getHomeSourceBean().getName());
         tvScale.setText(PlayerHelper.getScaleName(Hawk.get(HawkConfig.PLAY_SCALE, 0)));
@@ -418,20 +421,22 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 dialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<String>() {
                     @Override
                     public void click(String value, int pos) {
+                        dialog.dismiss();
                         String newApi = HistoryHelper.getApiLineUrl(value);
-                        String oldApi = Hawk.get(HawkConfig.API_URL, "");
                         if (newApi.isEmpty()) {
                             return;
                         }
-                        Hawk.put(HawkConfig.API_URL, newApi);
-                        Hawk.put(HawkConfig.LIVE_API_URL, newApi);
-                        HistoryHelper.setLiveApiHistory(newApi);
-                        tvApi.setText(newApi);
-                        refreshApiLineText();
-                        dialog.dismiss();
-                        if (!oldApi.equals(newApi)) {
-                            restartAppAfterConfigChanged();
+                        String oldApi = Hawk.get(HawkConfig.API_URL, "");
+                        if (oldApi.equals(newApi)) {
+                            return;
                         }
+                        // 多仓里切到「国外频道」这个仓，要跟伦理一样先输密码
+                        String lineName = HistoryHelper.getApiLineName(value);
+                        if (apiLines.size() > 1 && lineName != null && lineName.contains("国外频道")) {
+                            showApiLinePasswordDialog(value);
+                            return;
+                        }
+                        applyApiLine(value);
                     }
 
                     @Override
@@ -792,7 +797,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
             @Override
             public void onClick(View v) {
                 FastClickCheckUtil.check(v);
-                boolean historyMerge = !Hawk.get(HawkConfig.HISTORY_MERGE, false);
+                boolean historyMerge = !Hawk.get(HawkConfig.HISTORY_MERGE, true);
                 Hawk.put(HawkConfig.HISTORY_MERGE, historyMerge);
                 tvHistoryMerge.setText(historyMerge ? "开启" : "关闭");
             }
@@ -844,6 +849,46 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 restartApp();
             }
         }, 2500);
+    }
+
+    /** 真正切换到某个仓（接口线路） */
+    private void applyApiLine(String value) {
+        String newApi = HistoryHelper.getApiLineUrl(value);
+        String oldApi = Hawk.get(HawkConfig.API_URL, "");
+        if (newApi.isEmpty()) {
+            return;
+        }
+        Hawk.put(HawkConfig.API_URL, newApi);
+        Hawk.put(HawkConfig.LIVE_API_URL, newApi);
+        HistoryHelper.setLiveApiHistory(newApi);
+        tvApi.setText(newApi);
+        refreshApiLineText();
+        if (!oldApi.equals(newApi)) {
+            restartAppAfterConfigChanged();
+        }
+    }
+
+    /** 切到保护的仓（国外频道）前先要密码，密码与伦理分类共用 */
+    private void showApiLinePasswordDialog(final String value) {
+        if (mActivity == null || mActivity.isFinishing()) {
+            return;
+        }
+        final NumericPasswordDialog dialog = new NumericPasswordDialog(mActivity, "国外频道 · 需要密码");
+        dialog.setOnListener(new NumericPasswordDialog.OnListener() {
+            @Override
+            public void onSubmit(String password) {
+                if (PROTECTED_API_LINE_PASSWORD.equals(password)) {
+                    applyApiLine(value);
+                } else {
+                    Toast.makeText(mContext, "密码错误", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onCancel() {
+            }
+        });
+        dialog.show();
     }
 
     private void refreshApiLineText() {

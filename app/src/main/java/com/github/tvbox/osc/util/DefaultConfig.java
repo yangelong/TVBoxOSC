@@ -40,7 +40,7 @@ public class DefaultConfig {
                     data.add(sortData);
                 }
                 if (withMy)
-                    data.add(0, new MovieSort.SortData("my0", "主页"));
+                    data.add(0, new MovieSort.SortData("my0", "换片源"));
                 Collections.sort(data);
                 return data;
             }
@@ -64,7 +64,7 @@ public class DefaultConfig {
             }
         }
         if (withMy)
-            data.add(0, new MovieSort.SortData("my0", "主页"));
+            data.add(0, new MovieSort.SortData("my0", "换片源"));
         Collections.sort(data);
         return data;
     }
