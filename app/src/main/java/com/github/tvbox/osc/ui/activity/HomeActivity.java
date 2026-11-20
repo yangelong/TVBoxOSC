@@ -163,6 +163,8 @@ public class HomeActivity extends BaseActivity {
 
     @Override
     protected void init() {
+        // 每次进入首页（含重启 App、切换首页数据源后重建界面）都要重新输密码
+        UNLOCKED_PROTECTED_KEYWORDS.clear();
         EventBus.getDefault().register(this);
         eventBusRegistered = true;
         ControlManager.get().startServer();
@@ -741,6 +743,8 @@ public class HomeActivity extends BaseActivity {
                 showFilterIcon((int) event.obj);
             }
         } else if (event.type == RefreshEvent.TYPE_HOME_SOURCE_CHANGE) {
+            // 换了首页站源/点播源，密码重新输
+            UNLOCKED_PROTECTED_KEYWORDS.clear();
             refreshHome(false);
         } else if (event.type == RefreshEvent.TYPE_CATEGORY_EMPTY) {
             hideEmptyCategory((String) event.obj);
