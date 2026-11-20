@@ -124,6 +124,8 @@ public class HomeActivity extends BaseActivity {
     private static final String[] PROTECTED_SOURCE_KEYWORDS = {"国外频道"};
     /** 切换数据源时左上角显示的提示文字（闪烁） */
     private static final String SWITCHING_TEXT = "切换中...";
+    /** 冷启动/首次加载时左上角显示的提示文字（闪烁），区别于「切换中」 */
+    private static final String LOADING_TEXT = "加载中...";
     private static final Set<String> UNLOCKED_PROTECTED_KEYWORDS = new HashSet<>();
     // 当前正在显示的分类密码框；用引用而不是布尔标记，避免对话框被系统回收后标记卡在 true
     private NumericPasswordDialog categoryPasswordDialog = null;
@@ -435,7 +437,7 @@ public class HomeActivity extends BaseActivity {
             }
             return;
         }
-        tvNameAnimation();
+        tvNameAnimation(LOADING_TEXT);
         showLoading();
         if (dataInitOk && !jarInitOk) {
             if (!ApiConfig.get().getSpider().isEmpty()) {
@@ -768,7 +770,9 @@ public class HomeActivity extends BaseActivity {
         if (keepCurrentContent && home != null && home.getName() != null && !home.getName().isEmpty()) {
             previousHomeName = tvName.getText() == null ? null : tvName.getText().toString();
         }
-        tvNameAnimation();
+        // 只有「换片源」这种真正在切数据源时才提示切换中；冷启动/首次加载提示加载中
+        boolean switching = keepCurrentContent && previousHomeSource != null;
+        tvNameAnimation(switching ? SWITCHING_TEXT : LOADING_TEXT);
         if (home == null) {
             loadingSourceKey = null;
             if (!keepCurrentContent) showLoading();
@@ -779,7 +783,6 @@ public class HomeActivity extends BaseActivity {
         if (!keepCurrentContent) {
             showLoading();
         }
-        boolean switching = keepCurrentContent && previousHomeSource != null;
         if (switching) {
             // 切换数据源：跳过「首页推荐」那次额外请求，并把超时看门狗挂上
             mHandler.removeCallbacks(sourceSwitchWatchdog);
@@ -1049,6 +1052,9 @@ public class HomeActivity extends BaseActivity {
             }
             sortData.hidden = true;
             sortAdapter.notifyItemChanged(i);
+            // 明确告诉用户「为什么点一下就没了」，否则会觉得莫名其妙
+            String shownName = sortData.name == null || sortData.name.isEmpty() ? "该栏目" : sortData.name;
+            Toast.makeText(HomeActivity.this, "「" + shownName + "」无片源，已隐藏", Toast.LENGTH_SHORT).show();
             // 如果用户正停在这个空栏目上，退回第一个栏目，避免停在一个「没找到数据」的空页
             if (i == currentSelected && currentSelected != 0) {
                 currentSelected = 0;
@@ -1564,11 +1570,11 @@ public class HomeActivity extends BaseActivity {
         previousHomeName = null;
     }
 
-    private void tvNameAnimation()
+    private void tvNameAnimation(String tip)
     {
         tvName.clearAnimation();
-        // 切换数据源时不再显示（闪烁的）数据源名字，改成闪烁的「切换中...」提示
-        tvName.setText(SWITCHING_TEXT);
+        // 切换数据源时不再显示（闪烁的）数据源名字，改成闪烁的提示文字
+        tvName.setText(tip == null ? LOADING_TEXT : tip);
         AlphaAnimation blinkAnimation = new AlphaAnimation(0.0f, 1.0f);
         blinkAnimation.setDuration(500);
         blinkAnimation.setStartOffset(20);

@@ -13,8 +13,8 @@ import java.util.ArrayList;
  */
 public class ProtectedZoneHelper {
     public static final String FOREIGN_WAREHOUSE_KEYWORD = "国外频道";
-    /** 分类名里出现这些词，就要密码、并排到最后（含繁体、带空格写法） */
-    private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理", "倫理"};
+    /** 分类名里出现这些词，就要密码、并排到最后（含繁体、带空格写法；有的源把它写成「理论片」） */
+    private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理", "倫理", "理论", "理論"};
 
     /** 命中的保护关键字，没命中返回 null；名字做了去空格/全角空格处理 */
     public static String matchedProtectedCategoryKeyword(String name) {
