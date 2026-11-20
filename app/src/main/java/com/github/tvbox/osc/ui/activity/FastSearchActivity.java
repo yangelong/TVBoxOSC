@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.animation.BounceInterpolator;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.lifecycle.ViewModelProvider;
 
@@ -33,6 +34,7 @@ import com.github.tvbox.osc.ui.adapter.FastSearchAdapter;
 import com.github.tvbox.osc.ui.adapter.SearchWordAdapter;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HistoryHelper;
+import com.github.tvbox.osc.util.ProtectedZoneHelper;
 import com.github.tvbox.osc.util.SearchHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
 import com.lzy.okgo.OkGo;
@@ -458,7 +460,6 @@ public class FastSearchActivity extends BaseActivity {
         quickSearchWord.addAll(SearchHelper.splitWords(searchTitle));
         List<String> words = new ArrayList<>(new LinkedHashSet<>(quickSearchWord));
         EventBus.getDefault().post(new RefreshEvent(RefreshEvent.TYPE_QUICK_SEARCH_WORD, words));
-        // 分词
 //        OkGo.<String>get("http://api.pullword.com/get.php?source=" + URLEncoder.encode(searchTitle) + "&param1=0&param2=0&json=1")
 //                .tag("fenci")
 //                .execute(new AbsCallback<String>() {
@@ -492,6 +493,31 @@ public class FastSearchActivity extends BaseActivity {
 //                        super.onError(response);
 //                    }
 //                });
+    }
+
+    /**
+     * 候选搜索词：主名 + 拆分出的短词，再加上「结果里真实存在的其它季」。
+     * 不再凭空补「第一季…第十季」这种猜出来的词，搜「第五季」时只有当站里真有
+     * 「某某第四季」之类的影片，才会出现那个候选。
+     */
+    private void refreshSearchWordChips() {
+        if (searchWordAdapter == null) return;
+        List<String> words = new ArrayList<>(SearchHelper.splitWords(searchTitle));
+        for (String variant : SearchHelper.seasonVariantsFromResults(searchTitle, detailFallbackSearchResults)) {
+            if (TextUtils.isEmpty(variant)) continue;
+            if (!words.contains(variant)) {
+                words.add(variant);
+            }
+            if (words.size() >= 12) {
+                break;
+            }
+        }
+        if (words.isEmpty()) return;
+        List<String> current = searchWordAdapter.getData();
+        if (current != null && current.size() == words.size() && current.containsAll(words)) {
+            return;
+        }
+        searchWordAdapter.setNewData(words);
     }
 
     private void initData() {
@@ -632,6 +658,10 @@ public class FastSearchActivity extends BaseActivity {
             if (mCheckSources != null && !mCheckSources.containsKey(bean.getKey())) {
                 continue;
             }
+            // 国外频道 / 伦理（理论片）这类保护区的源，不参与搜索
+            if (ProtectedZoneHelper.isSearchBlockedSource(bean.getKey())) {
+                continue;
+            }
             searchTasks.add(new SearchTask(bean.getKey(), searchTitle, currentSearchToken));
             this.spNames.put(bean.getName(), bean.getKey());
         }
@@ -639,6 +669,9 @@ public class FastSearchActivity extends BaseActivity {
         if (searchTasks.size() <= 0) {
             showEmpty();
             setSearchStatusText("\u65e0\u641c\u7d22\u6e90", "\u7ed3\u679c 0");
+            if (ProtectedZoneHelper.isCurrentWarehouseProtected()) {
+                Toast.makeText(mContext, "当前是保护频道，影视内容不参与搜索", Toast.LENGTH_SHORT).show();
+            }
             return;
         }
         for (SearchTask task : searchTasks) {
@@ -697,6 +730,7 @@ public class FastSearchActivity extends BaseActivity {
 
         if (absXml != null && absXml.movie != null && absXml.movie.videoList != null && absXml.movie.videoList.size() > 0) {
             List<Movie.Video> data = SearchHelper.sortSearchResults(absXml.movie.videoList, searchTitle);
+            data = SearchHelper.filterProtectedResults(data);
             for (Movie.Video video : data) {
                 detailFallbackSearchResults.add(video);
                 if (!resultVods.containsKey(video.sourceKey)) {
@@ -708,6 +742,7 @@ public class FastSearchActivity extends BaseActivity {
                 }
             }
             addMainSearchResults(data);
+            refreshSearchWordChips();
         }
 
         finishSearchIfDone();
@@ -960,6 +995,7 @@ public class FastSearchActivity extends BaseActivity {
     private void finishSearchIfDone() {
         if (allRunCount.get() > 0) return;
         searchPaused = false;
+        refreshSearchWordChips();
         updateSearchStatus();
         if (searchAdapter.getData().size() == 0 && resultVods.isEmpty()) {
             showEmpty();

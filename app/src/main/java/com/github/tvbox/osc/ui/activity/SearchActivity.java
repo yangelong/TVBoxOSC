@@ -42,6 +42,7 @@ import com.github.tvbox.osc.ui.tv.widget.SearchKeyboard;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.HistoryHelper;
+import com.github.tvbox.osc.util.ProtectedZoneHelper;
 import com.github.tvbox.osc.util.SearchHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
 import com.google.gson.Gson;
@@ -359,6 +360,15 @@ public class SearchActivity extends BaseActivity {
             @Override
             public void onClick(View view) {
                 List<SourceBean> searchAbleSource = ApiConfig.get().getSearchSourceBeanList();
+                // 保护区的源不列出来给用户勾选，勾了也不会被搜
+                List<SourceBean> visibleSources = new ArrayList<>();
+                for (SourceBean bean : searchAbleSource) {
+                    if (bean == null || ProtectedZoneHelper.isSearchBlockedSource(bean.getKey())) {
+                        continue;
+                    }
+                    visibleSources.add(bean);
+                }
+                searchAbleSource = visibleSources;
                 if (mSearchCheckboxDialog == null) {
                     mSearchCheckboxDialog = new SearchCheckboxDialog(SearchActivity.this, searchAbleSource, mCheckSources);
                 }else {
@@ -815,6 +825,10 @@ public class SearchActivity extends BaseActivity {
             if (mCheckSources != null && !mCheckSources.containsKey(bean.getKey())) {
                 continue;
             }
+            // 国外频道 / 伦理（理论片）这类保护区的源，不参与搜索
+            if (ProtectedZoneHelper.isSearchBlockedSource(bean.getKey())) {
+                continue;
+            }
             searchTasks.add(new SearchTask(bean.getKey(), searchTitle, currentSearchToken));
         }
         if (searchTasks.size() <= 0) {
@@ -854,6 +868,7 @@ public class SearchActivity extends BaseActivity {
         releaseSearchSlotAndStartNext(sourceKey, absXml.searchToken);
         if (absXml != null && absXml.movie != null && absXml.movie.videoList != null && absXml.movie.videoList.size() > 0) {
             List<Movie.Video> data = SearchHelper.sortSearchResults(absXml.movie.videoList, searchTitle);
+            data = SearchHelper.filterProtectedResults(data);
             detailFallbackSearchResults.addAll(data);
             addSearchResults(data);
         }

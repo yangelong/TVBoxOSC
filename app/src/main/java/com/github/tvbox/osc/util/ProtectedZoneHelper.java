@@ -15,6 +15,8 @@ public class ProtectedZoneHelper {
     public static final String FOREIGN_WAREHOUSE_KEYWORD = "国外频道";
     /** 分类名里出现这些词，就要密码、并排到最后（含繁体、带空格写法；有的源把它写成「理论片」） */
     private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理", "倫理", "理论", "理論"};
+    /** 站点/频道名里出现这些词，整站内容不进搜索结果 */
+    private static final String[] PROTECTED_SOURCE_NAME_KEYWORDS = {"国外频道", "伦理", "倫理", "理论", "理論"};
 
     /** 命中的保护关键字，没命中返回 null；名字做了去空格/全角空格处理 */
     public static String matchedProtectedCategoryKeyword(String name) {
@@ -75,5 +77,45 @@ public class ProtectedZoneHelper {
             return true;
         }
         return isForeignWarehouseName(currentWarehouseName());
+    }
+
+    /** 当前整仓是不是「国外频道」这种保护区（里面的所有站点都算） */
+    public static boolean isCurrentWarehouseProtected() {
+        return isForeignWarehouseName(currentWarehouseName())
+                || isForeignWarehouseName(currentHomeSourceName());
+    }
+
+    /** 站点/频道名是否带保护区字样（国外频道、伦理、理论片…） */
+    public static boolean isProtectedSourceName(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        String normalized = name.replace(" ", "").replace("\u3000", "").replace("\t", "");
+        for (String keyword : PROTECTED_SOURCE_NAME_KEYWORDS) {
+            if (normalized.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 这个搜索源是否要排除在搜索之外：
+     * 1、当前整仓是「国外频道」→ 里面所有站点都不搜；
+     * 2、站点自己名字带「国外频道/伦理/理论片」→ 不搜。
+     */
+    public static boolean isSearchBlockedSource(String sourceKey) {
+        if (sourceKey == null || sourceKey.isEmpty()) {
+            return false;
+        }
+        if (isCurrentWarehouseProtected()) {
+            return true;
+        }
+        try {
+            SourceBean bean = ApiConfig.get().getSource(sourceKey);
+            return bean != null && isProtectedSourceName(bean.getName());
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 }

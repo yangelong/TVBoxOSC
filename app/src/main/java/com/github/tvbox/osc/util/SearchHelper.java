@@ -39,6 +39,16 @@ public class SearchHelper {
         if (mCheckSources == null || mCheckSources.isEmpty()) {
             mCheckSources = getSources();
         }
+        // 保护区的源（国外频道 / 伦理、理论片）一律不参与搜索，用户勾选过也不搜
+        if (mCheckSources != null) {
+            java.util.Iterator<String> iterator = mCheckSources.keySet().iterator();
+            while (iterator.hasNext()) {
+                String key = iterator.next();
+                if (ProtectedZoneHelper.isSearchBlockedSource(key)) {
+                    iterator.remove();
+                }
+            }
+        }
 //        else {
 //            HashMap<String, String> newSources = getSources();
 //            for (Map.Entry<String, String> entry : newSources.entrySet()) {
@@ -84,9 +94,30 @@ public class SearchHelper {
             if (!bean.isSearchable()) {
                 continue;
             }
+            if (ProtectedZoneHelper.isSearchBlockedSource(bean.getKey())) {
+                continue;
+            }
             mCheckSources.put(bean.getKey(), "1");
         }
         return mCheckSources;
+    }
+
+    /** 把保护区（国外频道 / 伦理、理论片频道）的结果整条剔掉，防御某些站点跨源返回 */
+    public static List<Movie.Video> filterProtectedResults(List<Movie.Video> videos) {
+        if (videos == null || videos.isEmpty()) {
+            return videos;
+        }
+        List<Movie.Video> result = new ArrayList<>();
+        for (Movie.Video video : videos) {
+            if (video == null) {
+                continue;
+            }
+            if (ProtectedZoneHelper.isSearchBlockedSource(video.sourceKey)) {
+                continue;
+            }
+            result.add(video);
+        }
+        return result;
     }
 
     public static List<Movie.Video> sortSearchResults(List<Movie.Video> videos, String searchTitle) {
@@ -245,8 +276,9 @@ public class SearchHelper {
     /**
      * 搜索框下面的候选词（只用来让用户点选，绝不拿来发起搜索）：
      * 1、去掉季号后的主名，例「奔跑吧兄弟」；
-     * 2、主名按「吧/的/之」这类连接字再拆短，例「奔跑吧」「兄弟」；
-     * 3、季候选词，例「奔跑吧兄弟第一季」…「第十季」，方便直接点到某一季。
+     * 2、主名按「吧/的/之」这类连接字再拆短，例「奔跑吧」「兄弟」。
+     * 注意：不再凭空列出「第一季…第十季」这种猜出来的词，季候选词只在搜索结果里
+     * 确实有对应影片时才由 {@link #seasonVariantsFromResults} 补进来。
      */
     public static List<String> splitWords(String text) {
         List<String> result = new ArrayList<>();
@@ -258,24 +290,77 @@ public class SearchHelper {
             return result;
         }
         java.util.LinkedHashSet<String> words = new java.util.LinkedHashSet<>();
-        String baseName = title;
-        Matcher matcher = SEASON_SUFFIX_PATTERN.matcher(title);
-        if (matcher.matches()) {
-            String candidate = matcher.group(1) == null ? "" : matcher.group(1).trim();
-            if (!candidate.isEmpty()) {
-                baseName = candidate;
-            }
-        }
+        String baseName = baseNameWithoutSeason(title);
         if (!baseName.isEmpty()) {
             words.add(baseName);
         }
         words.addAll(splitBaseName(baseName));
-        for (int i = 1; i <= 10; i++) {
-            if (!baseName.isEmpty()) {
-                words.add(baseName + CHINESE_NUMBERS[i] + "季");
+        result.addAll(words);
+        return result;
+    }
+
+    /** 去掉末尾的季号，得到主名（「奔跑吧兄弟第十季」→「奔跑吧兄弟」） */
+    private static String baseNameWithoutSeason(String title) {
+        if (title == null || title.isEmpty()) {
+            return "";
+        }
+        Matcher matcher = SEASON_SUFFIX_PATTERN.matcher(title);
+        if (matcher.matches()) {
+            String candidate = matcher.group(1) == null ? "" : matcher.group(1).trim();
+            if (!candidate.isEmpty()) {
+                return candidate;
             }
         }
-        result.addAll(words);
+        return title;
+    }
+
+    /**
+     * 从真实搜索到的影片里挑「同一部片子的其它季」当候选词：
+     * 只有结果中确实存在「主名 + 第N季」的影片才会出现，例用户搜「庆余年第五季」，
+     * 结果里有「庆余年第二季」就给这个候选；没有就一个都不给。
+     */
+    public static List<String> seasonVariantsFromResults(String searchTitle, List<Movie.Video> videos) {
+        List<String> result = new ArrayList<>();
+        if (videos == null || videos.isEmpty()) {
+            return result;
+        }
+        String title = cleanQuery(searchTitle);
+        if (title.isEmpty()) {
+            return result;
+        }
+        final String normalizedQuery = normalizeSearchText(title);
+        final String normalizedBase = normalizeSearchText(baseNameWithoutSeason(title));
+        if (normalizedBase.isEmpty()) {
+            return result;
+        }
+        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+        for (Movie.Video video : videos) {
+            if (video == null || video.name == null) {
+                continue;
+            }
+            String name = cleanQuery(video.name);
+            if (name.isEmpty() || seen.contains(name)) {
+                continue;
+            }
+            String normalizedName = normalizeSearchText(name);
+            // 和当前搜索词等效的不要（用户已经搜到了）
+            if (normalizedName.equals(normalizedQuery)) {
+                continue;
+            }
+            // 必须是同一部首的名字
+            if (!normalizedName.startsWith(normalizedBase)) {
+                continue;
+            }
+            // 只认「…季」这种真正的季号结果，普通续集数字（如「唐人街探案2」）不混进来
+            if (!normalizedName.endsWith("季")) {
+                continue;
+            }
+            seen.add(name);
+            if (seen.size() >= 8) {
+                break;
+            }
+        }
+        result.addAll(seen);
         return result;
     }
 
