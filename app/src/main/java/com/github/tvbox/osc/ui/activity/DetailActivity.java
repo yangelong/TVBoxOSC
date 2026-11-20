@@ -137,6 +137,7 @@ public class DetailActivity extends BaseActivity {
     public String sourceKey;
     public String firstsourceKey;
     private boolean fromCollect;
+    private boolean fromProtectedCategory; // 从伦理这类需要密码的分类进来的，不写播放历史
     boolean seriesSelect = false;
     private View seriesFlagFocus = null;
     private boolean isReverse;
@@ -1022,6 +1023,7 @@ public class DetailActivity extends BaseActivity {
             vod_name=bundle.getString("title", "");
             vod_picture=bundle.getString("picture", "");
             fromCollect = bundle.getBoolean("collect", false);
+            fromProtectedCategory = bundle.getBoolean("protectedCategory", false);
             Object fallbackCandidates = bundle.getSerializable(EXTRA_DETAIL_FALLBACK_CANDIDATES);
             if (fallbackCandidates instanceof ArrayList) {
                 cacheDetailFallbackCandidates(vod_name, (ArrayList<Movie.Video>) fallbackCandidates);
@@ -1864,6 +1866,10 @@ public class DetailActivity extends BaseActivity {
     }
 
     private void insertVod(String sourceKey, VodInfo vodInfo) {
+        // 伦理这类需要密码的分类不进播放历史
+        if (fromProtectedCategory) {
+            return;
+        }
         try {
             vodInfo.playNote = vodInfo.seriesMap.get(vodInfo.playFlag).get(vodInfo.playIndex).name;
         } catch (Throwable th) {

@@ -108,10 +108,11 @@ public class HomeActivity extends BaseActivity {
     private final Handler mHandler = new Handler();
     private long mExitTime = 0;
     private boolean eventBusRegistered = false;
-    // 需要密码才能进入的分类（按分类名关键字判断）与当前进程内已解锁的分类 id
+    // 需要密码才能进入的分类（按分类名关键字判断）；解锁状态按关键字记在进程内，
+    // 切换首页数据源会重建 Activity，所以必须是 static 才不会重新弹密码
     private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理"};
     private static final String PROTECTED_CATEGORY_PASSWORD = "104";
-    private final Set<String> unlockedProtectedCategories = new HashSet<>();
+    private static final Set<String> UNLOCKED_PROTECTED_KEYWORDS = new HashSet<>();
     private boolean categoryPasswordShowing = false;
     private final Runnable mRunnable = new Runnable() {
         @SuppressLint("SetTextI18n")
@@ -535,6 +536,7 @@ public class HomeActivity extends BaseActivity {
     }
 
     private void initViewPager(AbsSortXml absXml) {
+        moveProtectedCategoriesToEnd();
         if (sortAdapter.getData().size() > 0) {
             for (MovieSort.SortData data : sortAdapter.getData()) {
                 if (data.id.equals("my0")) {
@@ -576,6 +578,32 @@ public class HomeActivity extends BaseActivity {
         } else if (!fragments.isEmpty()) {
             fragments.clear();
         }
+    }
+
+    /**
+     * 把需要密码的分类（伦理）统一挪到最后一个，避免它出现在中间位置被顺手点开。
+     * must 在创建 fragments 之前调用，保证 tab 顺序和 pager 页面顺序一致。
+     */
+    private void moveProtectedCategoriesToEnd() {
+        if (sortAdapter == null) {
+            return;
+        }
+        List<MovieSort.SortData> data = sortAdapter.getData();
+        if (data.size() < 2) {
+            return;
+        }
+        List<MovieSort.SortData> protectedItems = new ArrayList<>();
+        for (int i = data.size() - 1; i >= 1; i--) { // 第 0 个是首页/推荐，不参与移动
+            MovieSort.SortData item = data.get(i);
+            if (item != null && matchedProtectedKeyword(item.name) != null) {
+                protectedItems.add(0, data.remove(i));
+            }
+        }
+        if (protectedItems.isEmpty()) {
+            return;
+        }
+        data.addAll(protectedItems);
+        sortAdapter.notifyDataSetChanged();
     }
 
     private void updateSortData(List<MovieSort.SortData> newSortData) {
@@ -781,7 +809,7 @@ public class HomeActivity extends BaseActivity {
         if (keyword == null) {
             return true;
         }
-        if (unlockedProtectedCategories.contains(keyword)) {
+        if (UNLOCKED_PROTECTED_KEYWORDS.contains(keyword)) {
             return true;
         }
         if (!categoryPasswordShowing) {
@@ -801,7 +829,7 @@ public class HomeActivity extends BaseActivity {
             public void onSubmit(String password) {
                 categoryPasswordShowing = false;
                 if (PROTECTED_CATEGORY_PASSWORD.equals(password)) {
-                    unlockedProtectedCategories.add(keyword);
+                    UNLOCKED_PROTECTED_KEYWORDS.add(keyword);
                     int position = sortAdapter.getData().indexOf(sortData);
                     sortFocused = position < 0 ? currentSelected : position;
                     sortChange = true;

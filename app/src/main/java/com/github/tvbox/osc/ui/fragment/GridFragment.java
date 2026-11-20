@@ -99,6 +99,11 @@ public class GridFragment extends BaseLazyFragment {
         return this;
     }
 
+    /** 当前分类是不是需要密码的（伦理），用于决定详情页是否写播放历史 */
+    private boolean isProtectedCategory() {
+        return sortData != null && sortData.name != null && sortData.name.contains("伦理");
+    }
+
     @Override
     protected int getLayoutResID() {
         return R.layout.fragment_grid;
@@ -259,6 +264,8 @@ public class GridFragment extends BaseLazyFragment {
                     bundle.putString("id", video.id);
                     bundle.putString("sourceKey", video.sourceKey);
                     bundle.putString("title", video.name);
+                    // 从伦理这类需要密码的分类进来的，详情页不再写入播放历史
+                    bundle.putBoolean("protectedCategory", isProtectedCategory());
                     if( video.tag !=null && (video.tag.equals("folder") || video.tag.equals("cover"))){
                         focusedView = view;
                         if(("12".indexOf(getUITag()) != -1)){
