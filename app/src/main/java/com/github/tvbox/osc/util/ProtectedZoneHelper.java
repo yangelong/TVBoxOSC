@@ -1,6 +1,7 @@
 package com.github.tvbox.osc.util;
 
 import com.github.tvbox.osc.api.ApiConfig;
+import com.github.tvbox.osc.bean.MovieSort;
 import com.github.tvbox.osc.bean.SourceBean;
 import com.orhanobut.hawk.Hawk;
 
@@ -17,6 +18,28 @@ public class ProtectedZoneHelper {
     private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理", "倫理", "理论", "理論"};
     /** 站点/频道名里出现这些词，整站内容不进搜索结果 */
     private static final String[] PROTECTED_SOURCE_NAME_KEYWORDS = {"国外频道", "伦理", "倫理", "理论", "理論"};
+    /** 首页加载完栏目后，这里留一份伦理栏目的信息，搜索预热时用它去抓页 */
+    private static String cachedSortSourceKey;
+    private static MovieSort.SortData cachedProtectedSort;
+
+    public static void putProtectedSort(String sourceKey, MovieSort.SortData sortData) {
+        if (sourceKey == null || sourceKey.isEmpty()) {
+            return;
+        }
+        if (sourceKey.equals(cachedSortSourceKey) && sortData == null) {
+            // 换了源但新源没有伦理栏目，把旧的清掉
+            cachedProtectedSort = null;
+        }
+        cachedSortSourceKey = sourceKey;
+        cachedProtectedSort = sortData;
+    }
+
+    public static MovieSort.SortData getProtectedSort(String sourceKey) {
+        if (sourceKey == null || !sourceKey.equals(cachedSortSourceKey)) {
+            return null;
+        }
+        return cachedProtectedSort;
+    }
 
     /** 命中的保护关键字，没命中返回 null；名字做了去空格/全角空格处理 */
     public static String matchedProtectedCategoryKeyword(String name) {

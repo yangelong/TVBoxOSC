@@ -19,6 +19,18 @@ public class ProtectedIdStore {
     private static final String KEY = "protected_vod_ids_v1";
     /** 每个数据源最多记这么多条，防止 Hawk 越存越大 */
     private static final int MAX_PER_SOURCE = 2000;
+    /** 本次进程里已经做过「搜索前预热」的源，避免每搜一次都再去抓几页 */
+    private static final java.util.HashSet<String> WARMED_SOURCES = new java.util.HashSet<>();
+
+    public static boolean isWarmed(String sourceKey) {
+        return sourceKey != null && WARMED_SOURCES.contains(sourceKey);
+    }
+
+    public static void markWarmed(String sourceKey) {
+        if (sourceKey != null && !sourceKey.isEmpty()) {
+            WARMED_SOURCES.add(sourceKey);
+        }
+    }
 
     private static JSONObject loadMap() {
         try {
@@ -136,5 +148,6 @@ public class ProtectedIdStore {
             Hawk.put(KEY, "{}");
         } catch (Throwable ignored) {
         }
+        WARMED_SOURCES.clear();
     }
 }

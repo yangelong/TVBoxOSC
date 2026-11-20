@@ -42,6 +42,7 @@ import com.github.tvbox.osc.ui.tv.widget.SearchKeyboard;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.HistoryHelper;
+import com.github.tvbox.osc.util.ProtectedSearchWarmup;
 import com.github.tvbox.osc.util.ProtectedZoneHelper;
 import com.github.tvbox.osc.util.SearchHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
@@ -124,6 +125,7 @@ public class SearchActivity extends BaseActivity {
     private TextView wordsSwitch;
     private boolean aggregateSearchMode;
     private boolean aggregateSearchModeInited = false;
+    private ProtectedSearchWarmup protectedWarmup = null;
 
     @Override
     protected int getLayoutResID() {
@@ -527,6 +529,10 @@ public class SearchActivity extends BaseActivity {
         sourceViewModel.listResult.observe(this, new androidx.lifecycle.Observer<AbsXml>() {
             @Override
             public void onChanged(AbsXml data) {
+                // 搜索前的保护区预热：这几页结果只用来记 id，不更新界面
+                if (protectedWarmup != null && protectedWarmup.handleResult(data)) {
+                    return;
+                }
                 if (!folderLoading) return;
                 folderLoading = false;
                 if (data == null || data.movie == null || data.movie.videoList == null) {
@@ -769,7 +775,27 @@ public class SearchActivity extends BaseActivity {
         this.searchTitle = SearchHelper.cleanQuery(title);
         mGridView.setVisibility(View.INVISIBLE);
         searchAdapter.setNewData(new ArrayList<>());
+        // 搜索前先把伦理栏目前几页抓进「排除名单」（只在这个源第一次搜索时做）
+        if (startProtectedWarmup()) {
+            return;
+        }
         searchResult();
+    }
+
+    /** 返回 true 表示正在预热，等预热结束的 onDone 里再真正开搜 */
+    private boolean startProtectedWarmup() {
+        if (protectedWarmup == null) {
+            protectedWarmup = new ProtectedSearchWarmup(sourceViewModel, new Runnable() {
+                @Override
+                public void run() {
+                    if (isFinishing() || mGridView == null) {
+                        return;
+                    }
+                    searchResult();
+                }
+            });
+        }
+        return protectedWarmup.startIfNeeded();
     }
 
     private ExecutorService searchExecutorService = null;

@@ -405,6 +405,9 @@ public class HomeActivity extends BaseActivity {
                         home != null ? home.getKey() : null, newSortData);
                 // 伦理这类保护栏目，在塞进 adapter 之前就先排到最后，保证 tab 和页面顺序一致
                 moveProtectedToEnd(visibleSortData);
+                // 记下这个源的伦理栏目，搜索时要用它去预热「排除名单」
+                ProtectedZoneHelper.putProtectedSort(home != null ? home.getKey() : null,
+                        findProtectedSort(visibleSortData));
                 updateSortData(visibleSortData);
                 initViewPager(absXml);
                 updateHomeRec(absXml);
@@ -869,6 +872,22 @@ public class HomeActivity extends BaseActivity {
         }
         data.addAll(protectedItems);
         return true;
+    }
+
+    /** 从栏目列表里挑出第一条伦理/理论片栏目，供搜索前的「排除名单预热」使用 */
+    private MovieSort.SortData findProtectedSort(List<MovieSort.SortData> data) {
+        if (data == null) {
+            return null;
+        }
+        for (MovieSort.SortData item : data) {
+            if (item == null || item.id == null) {
+                continue;
+            }
+            if (matchedProtectedKeyword(item.name) != null) {
+                return item;
+            }
+        }
+        return null;
     }
 
     private void updateSortData(List<MovieSort.SortData> newSortData) {
