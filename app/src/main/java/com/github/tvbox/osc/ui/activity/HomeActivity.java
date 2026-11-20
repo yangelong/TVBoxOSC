@@ -59,12 +59,14 @@ import com.github.tvbox.osc.ui.tv.widget.NoScrollViewPager;
 import com.github.tvbox.osc.ui.tv.widget.ViewObj;
 import com.github.tvbox.osc.util.AppManager;
 import com.github.tvbox.osc.util.DefaultConfig;
+import com.github.tvbox.osc.util.EmptyCategoryStore;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.HistoryHelper;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.MD5;
+import com.github.tvbox.osc.util.ProtectedZoneHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
 import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
@@ -396,7 +398,12 @@ public class HomeActivity extends BaseActivity {
                 if (home != null && home.getKey() != null) {
                     clearDeadHomeSource(home.getKey());
                 }
-                updateSortData(newSortData);
+                // 之前已经确认是空栏目的，加载 tab 之前就直接不给它位置（这次不再点一下才消失）
+                List<MovieSort.SortData> visibleSortData = EmptyCategoryStore.removeKnownEmpty(
+                        home != null ? home.getKey() : null, newSortData);
+                // 伦理这类保护栏目，在塞进 adapter 之前就先排到最后，保证 tab 和页面顺序一致
+                moveProtectedToEnd(visibleSortData);
+                updateSortData(visibleSortData);
                 initViewPager(absXml);
                 updateHomeRec(absXml);
                 if (home != null && home.getName() != null && !home.getName().isEmpty()) tvName.setText(home.getName());
@@ -837,8 +844,15 @@ public class HomeActivity extends BaseActivity {
             return;
         }
         List<MovieSort.SortData> data = sortAdapter.getData();
-        if (data.size() < 2) {
-            return;
+        if (moveProtectedToEnd(data)) {
+            sortAdapter.notifyDataSetChanged();
+        }
+    }
+
+    /** 就地调整列表，把保护分类挪到最后；返回是否真的移动过 */
+    private boolean moveProtectedToEnd(List<MovieSort.SortData> data) {
+        if (data == null || data.size() < 2) {
+            return false;
         }
         List<MovieSort.SortData> protectedItems = new ArrayList<>();
         for (int i = data.size() - 1; i >= 1; i--) { // 第 0 个是首页/推荐，不参与移动
@@ -848,10 +862,10 @@ public class HomeActivity extends BaseActivity {
             }
         }
         if (protectedItems.isEmpty()) {
-            return;
+            return false;
         }
         data.addAll(protectedItems);
-        sortAdapter.notifyDataSetChanged();
+        return true;
     }
 
     private void updateSortData(List<MovieSort.SortData> newSortData) {
@@ -1022,6 +1036,11 @@ public class HomeActivity extends BaseActivity {
         if (sortId == null || sortId.isEmpty() || sortAdapter == null) {
             return;
         }
+        // 记下来：下次加载这个数据源时直接不给这个栏目位置
+        SourceBean homeSource = ApiConfig.get().getHomeSourceBean();
+        if (homeSource != null && homeSource.getKey() != null) {
+            EmptyCategoryStore.mark(homeSource.getKey(), sortId);
+        }
         List<MovieSort.SortData> data = sortAdapter.getData();
         for (int i = 1; i < data.size(); i++) { // 第 0 个一般是首页/推荐，保留
             MovieSort.SortData sortData = data.get(i);
@@ -1048,17 +1067,9 @@ public class HomeActivity extends BaseActivity {
         return matchedProtectedKeyword(name) != null;
     }
 
-    /** 命中的保护关键字（如「伦理」），没命中返回 null */
+    /** 命中的保护关键字（如「伦理」，简繁/带空格都认），没命中返回 null */
     private String matchedProtectedKeyword(String name) {
-        if (name == null || name.isEmpty()) {
-            return null;
-        }
-        for (String keyword : PROTECTED_CATEGORY_KEYWORDS) {
-            if (name.contains(keyword)) {
-                return keyword;
-            }
-        }
-        return null;
+        return ProtectedZoneHelper.matchedProtectedCategoryKeyword(name);
     }
 
     /**

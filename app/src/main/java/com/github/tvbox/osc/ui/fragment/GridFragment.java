@@ -31,6 +31,8 @@ import com.github.tvbox.osc.ui.adapter.GridAdapter;
 import com.github.tvbox.osc.ui.adapter.GridFilterKVAdapter;
 import com.github.tvbox.osc.ui.dialog.GridFilterDialog;
 import com.github.tvbox.osc.ui.tv.widget.LoadMoreView;
+import com.github.tvbox.osc.bean.SourceBean;
+import com.github.tvbox.osc.util.EmptyCategoryStore;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.ImgUtil;
@@ -107,7 +109,7 @@ public class GridFragment extends BaseLazyFragment {
         if (ProtectedZoneHelper.isInForeignWarehouse()) {
             return true;
         }
-        return sortData != null && sortData.name != null && sortData.name.contains("伦理");
+        return sortData != null && ProtectedZoneHelper.isProtectedCategoryName(sortData.name);
     }
 
     @Override
@@ -446,6 +448,13 @@ public class GridFragment extends BaseLazyFragment {
                         }
                         hasActionItems = hasActionVideo(videos);
                         gridAdapter.setNewData(videos);
+                        // 这个栏目其实有数据，把它从「空栏目」名单里去掉
+                        if (sortData != null && sortData.id != null) {
+                            SourceBean homeSource = ApiConfig.get().getHomeSourceBean();
+                            if (homeSource != null && homeSource.getKey() != null) {
+                                EmptyCategoryStore.unmark(homeSource.getKey(), sortData.id);
+                            }
+                        }
                     } else {
                         hasActionItems = hasActionItems || hasActionVideo(absXml.movie.videoList);
                         gridAdapter.addData(absXml.movie.videoList);

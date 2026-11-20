@@ -833,6 +833,8 @@ public class ModelSettingFragment extends BaseLazyFragment {
     private void clearConfigSwitchCache() {
         try {
             SourceViewModel.clearRuntimeCache();
+            // 清缓存也把「空栏目」记录一起清掉，让栏目重新判定一次
+            com.github.tvbox.osc.util.EmptyCategoryStore.clearAll();
 //            FileUtils.clearSpiderCacheFiles();
             LOG.i("echo-clear-config-switch-cache");
         } catch (Exception e) {

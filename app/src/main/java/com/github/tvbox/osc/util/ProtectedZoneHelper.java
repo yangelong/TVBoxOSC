@@ -13,6 +13,26 @@ import java.util.ArrayList;
  */
 public class ProtectedZoneHelper {
     public static final String FOREIGN_WAREHOUSE_KEYWORD = "国外频道";
+    /** 分类名里出现这些词，就要密码、并排到最后（含繁体、带空格写法） */
+    private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理", "倫理"};
+
+    /** 命中的保护关键字，没命中返回 null；名字做了去空格/全角空格处理 */
+    public static String matchedProtectedCategoryKeyword(String name) {
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        String normalized = name.replace(" ", "").replace("\u3000", "").replace("\t", "");
+        for (String keyword : PROTECTED_CATEGORY_KEYWORDS) {
+            if (normalized.contains(keyword)) {
+                return keyword;
+            }
+        }
+        return null;
+    }
+
+    public static boolean isProtectedCategoryName(String name) {
+        return matchedProtectedCategoryKeyword(name) != null;
+    }
 
     public static boolean isForeignWarehouseName(String name) {
         return name != null && name.contains(FOREIGN_WAREHOUSE_KEYWORD);
