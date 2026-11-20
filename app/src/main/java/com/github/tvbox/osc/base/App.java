@@ -70,6 +70,12 @@ public class App extends MultiDexApplication {
         // 默认把点播接口地址填好；用户手动改过（Hawk 里已有值）就不动
         if (!Hawk.contains(HawkConfig.API_URL)) {
             Hawk.put(HawkConfig.API_URL, DefaultConfig.DEFAULT_API_URL);
+        } else {
+            // 之前版本把默认地址写成 fast20.json，这里把这条旧默认值纠正过来（用户自己填的其他地址不动）
+            String savedApi = Hawk.get(HawkConfig.API_URL, "");
+            if ("https://tvbox-1255793441.cos.ap-guangzhou.myqcloud.com/fast20.json".equals(savedApi)) {
+                Hawk.put(HawkConfig.API_URL, DefaultConfig.DEFAULT_API_URL);
+            }
         }
         if (!Hawk.contains(HawkConfig.PLAY_TYPE)) {
             Hawk.put(HawkConfig.PLAY_TYPE, 2);

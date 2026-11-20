@@ -43,6 +43,7 @@ import com.github.tvbox.osc.server.ControlManager;
 import com.github.tvbox.osc.ui.adapter.HomePageAdapter;
 import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
 import com.github.tvbox.osc.ui.adapter.SortAdapter;
+import com.github.tvbox.osc.ui.dialog.NumericPasswordDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.ui.dialog.TipDialog;
 import com.github.tvbox.osc.ui.fragment.GridFragment;
@@ -74,9 +75,11 @@ import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 import me.jessyan.autosize.utils.AutoSizeUtils;
 
@@ -105,6 +108,11 @@ public class HomeActivity extends BaseActivity {
     private final Handler mHandler = new Handler();
     private long mExitTime = 0;
     private boolean eventBusRegistered = false;
+    // 需要密码才能进入的分类（按分类名关键字判断）与当前进程内已解锁的分类 id
+    private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理"};
+    private static final String PROTECTED_CATEGORY_PASSWORD = "104";
+    private final Set<String> unlockedProtectedCategories = new HashSet<>();
+    private boolean categoryPasswordShowing = false;
     private final Runnable mRunnable = new Runnable() {
         @SuppressLint("SetTextI18n")
         @Override
@@ -706,6 +714,114 @@ public class HomeActivity extends BaseActivity {
             }
         } else if (event.type == RefreshEvent.TYPE_HOME_SOURCE_CHANGE) {
             refreshHome(false);
+        } else if (event.type == RefreshEvent.TYPE_CATEGORY_EMPTY) {
+            hideEmptyCategory((String) event.obj);
+        }
+    }
+
+    /**
+     * 某个分类加载完是空的，就把首页对应的分类标签隐藏，避免用户点进去看「没找到数据」。
+     */
+    private void hideEmptyCategory(String sortId) {
+        if (sortId == null || sortId.isEmpty() || sortAdapter == null) {
+            return;
+        }
+        List<MovieSort.SortData> data = sortAdapter.getData();
+        for (int i = 1; i < data.size(); i++) { // 第 0 个一般是首页/推荐，保留
+            MovieSort.SortData sortData = data.get(i);
+            if (sortData == null || sortData.hidden || !sortId.equals(sortData.id)) {
+                continue;
+            }
+            sortData.hidden = true;
+            sortAdapter.notifyItemChanged(i);
+            // 如果用户正停在这个空栏目上，退回第一个栏目，避免停在一个「没找到数据」的空页
+            if (i == currentSelected && currentSelected != 0) {
+                currentSelected = 0;
+                sortFocused = 0;
+                mViewPager.setCurrentItem(0, false);
+                changeTop(false);
+                if (mGridView != null) {
+                    mGridView.setSelectedPosition(0);
+                }
+            }
+            return;
+        }
+    }
+
+    private boolean isProtectedCategory(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        for (String keyword : PROTECTED_CATEGORY_KEYWORDS) {
+            if (name.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 进入分类前的密码校验。返回 true 表示允许进入。
+     */
+    private boolean canEnterCategory(int position) {
+        if (sortAdapter == null || position < 0 || position >= sortAdapter.getData().size()) {
+            return true;
+        }
+        MovieSort.SortData sortData = sortAdapter.getData().get(position);
+        if (sortData == null || !isProtectedCategory(sortData.name)) {
+            return true;
+        }
+        if (unlockedProtectedCategories.contains(sortData.id)) {
+            return true;
+        }
+        if (!categoryPasswordShowing) {
+            showCategoryPasswordDialog(sortData);
+        }
+        return false;
+    }
+
+    private void showCategoryPasswordDialog(final MovieSort.SortData sortData) {
+        if (isFinishing()) {
+            return;
+        }
+        categoryPasswordShowing = true;
+        NumericPasswordDialog dialog = new NumericPasswordDialog(this, sortData.name + " · 需要密码");
+        dialog.setOnListener(new NumericPasswordDialog.OnListener() {
+            @Override
+            public void onSubmit(String password) {
+                categoryPasswordShowing = false;
+                if (PROTECTED_CATEGORY_PASSWORD.equals(password)) {
+                    unlockedProtectedCategories.add(sortData.id);
+                    int position = sortAdapter.getData().indexOf(sortData);
+                    sortFocused = position < 0 ? currentSelected : position;
+                    sortChange = true;
+                    mHandler.removeCallbacks(mDataRunnable);
+                    mDataRunnable.run();
+                } else {
+                    Toast.makeText(HomeActivity.this, "密码错误", Toast.LENGTH_SHORT).show();
+                    restoreCategorySelection();
+                }
+            }
+
+            @Override
+            public void onCancel() {
+                categoryPasswordShowing = false;
+                restoreCategorySelection();
+            }
+        });
+        dialog.show();
+    }
+
+    private void restoreCategorySelection() {
+        sortChange = false;
+        sortFocused = currentSelected;
+        if (mGridView != null) {
+            mGridView.post(new Runnable() {
+                @Override
+                public void run() {
+                    mGridView.setSelectedPosition(currentSelected);
+                }
+            });
         }
     }
 
@@ -720,6 +836,9 @@ public class HomeActivity extends BaseActivity {
         public void run() {
             if (sortChange) {
                 sortChange = false;
+                if (!canEnterCategory(sortFocused)) {
+                    return;
+                }
                 BaseLazyFragment baseLazyFragment = fragments.get(sortFocused);
                 if (sortFocused != currentSelected) {
                     currentSelected = sortFocused;

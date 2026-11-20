@@ -136,8 +136,21 @@ public class VodInfo implements Serializable {
                 }
             }
         }
+        // 兜底：seriesFlags 里若有 seriesMap 中不存在的线路，也要保留在末尾，不能丢
+        for (VodSeriesFlag flag : seriesFlags) {
+            boolean exists = false;
+            for (VodSeriesFlag added : orderedFlags) {
+                if (added.name.equals(flag.name)) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                orderedFlags.add(flag);
+            }
+        }
         seriesMap = orderedMap;
-        if (orderedFlags.size() == seriesMap.size()) {
+        if (!orderedFlags.isEmpty()) {
             seriesFlags = orderedFlags;
         }
     }

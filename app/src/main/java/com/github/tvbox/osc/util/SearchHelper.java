@@ -109,8 +109,112 @@ public class SearchHelper {
         return results;
     }
 
+    /**
+     * 搜索匹配用的归一化：让「第 12 集」「第十二集」「12季」「十二部」这类写法互相等效。
+     * 规则：1、去空白；2、中文数字与阿拉伯数字等效；3、去掉数字前的「第」；4、集/季/部 等效为「季」。
+     */
     private static String normalizeSearchText(String text) {
-        return text == null ? "" : text.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
+        if (text == null) {
+            return "";
+        }
+        String result = text.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
+        result = chineseNumberToArabic(result);
+        result = result.replace("第", "");
+        return result.replace("集", "季").replace("部", "季");
+    }
+
+    private static boolean isChineseNumberChar(char c) {
+        switch (c) {
+            case '零': case '〇': case '一': case '二': case '两': case '三': case '四':
+            case '五': case '六': case '七': case '八': case '九': case '十':
+            case '百': case '千': case '万':
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * 把连续的中文数字片段转成阿拉伯数字（「十二」→12、「二十」→20、「一百零一」→101）。
+     */
+    private static String chineseNumberToArabic(String text) {
+        StringBuilder builder = new StringBuilder(text.length());
+        int index = 0;
+        while (index < text.length()) {
+            char c = text.charAt(index);
+            if (!isChineseNumberChar(c)) {
+                builder.append(c);
+                index++;
+                continue;
+            }
+            int end = index;
+            while (end < text.length() && isChineseNumberChar(text.charAt(end))) {
+                end++;
+            }
+            String run = text.substring(index, end);
+            builder.append(runToArabic(run));
+            index = end;
+        }
+        return builder.toString();
+    }
+
+    private static String runToArabic(String run) {
+        if (run.isEmpty()) {
+            return run;
+        }
+        if (run.length() == 1 && run.charAt(0) != '十' && run.charAt(0) != '百' && run.charAt(0) != '千' && run.charAt(0) != '万') {
+            int digit = chineseDigitValue(run.charAt(0));
+            return digit >= 0 ? String.valueOf(digit) : run;
+        }
+        long total = 0;
+        long section = 0;
+        long unit = 0;      // 当前正在累积的数字
+        boolean hasNumber = false;
+        for (int i = 0; i < run.length(); i++) {
+            char c = run.charAt(i);
+            int digit = chineseDigitValue(c);
+            if (digit >= 0) {
+                unit = digit;
+                hasNumber = true;
+                continue;
+            }
+            long multiplier = 0;
+            if (c == '十') multiplier = 10;
+            else if (c == '百') multiplier = 100;
+            else if (c == '千') multiplier = 1000;
+            else if (c == '万') multiplier = 10000;
+            if (multiplier == 0) {
+                continue;
+            }
+            if (multiplier == 10000) {
+                total = (total + section + (hasNumber ? unit : 0)) * 10000;
+                section = 0;
+            } else {
+                section += (hasNumber ? unit : 1) * multiplier;
+            }
+            unit = 0;
+            hasNumber = false;
+        }
+        section += hasNumber ? unit : 0;
+        total += section;
+        // 单个单位字符（如「十」）也要得到 10
+        return total > 0 ? String.valueOf(total) : run;
+    }
+
+    private static int chineseDigitValue(char c) {
+        switch (c) {
+            case '零': case '〇': return 0;
+            case '一': return 1;
+            case '二': case '两': return 2;
+            case '三': return 3;
+            case '四': return 4;
+            case '五': return 5;
+            case '六': return 6;
+            case '七': return 7;
+            case '八': return 8;
+            case '九': return 9;
+            default: return -1;
+        }
     }
 
     public static List<String> splitWords(String text) {

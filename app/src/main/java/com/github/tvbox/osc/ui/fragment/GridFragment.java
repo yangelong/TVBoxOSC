@@ -415,6 +415,10 @@ public class GridFragment extends BaseLazyFragment {
                     if (page == 1) {
                         hasActionItems = false;
                         showEmpty();
+                        // 该分类加载后没有任何数据，通知首页隐藏这个空栏目
+                        if (sortData != null && sortData.id != null) {
+                            EventBus.getDefault().post(new RefreshEvent(RefreshEvent.TYPE_CATEGORY_EMPTY, sortData.id));
+                        }
                     } else if(page > 2){// 只有一页数据时不提示
                         Toast.makeText(getContext(), "没有更多了", Toast.LENGTH_SHORT).show();
                     }
