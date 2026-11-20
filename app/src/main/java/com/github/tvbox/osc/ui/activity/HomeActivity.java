@@ -6,10 +6,15 @@ import android.animation.AnimatorSet;
 import android.animation.IntEvaluator;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.PowerManager;
 import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.View;
@@ -114,6 +119,15 @@ public class HomeActivity extends BaseActivity {
     private static final String PROTECTED_CATEGORY_PASSWORD = "104";
     private static final Set<String> UNLOCKED_PROTECTED_KEYWORDS = new HashSet<>();
     private boolean categoryPasswordShowing = false;
+    // 熄屏/锁屏后回来，伦理密码要重新输入
+    private final BroadcastReceiver screenOffReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                UNLOCKED_PROTECTED_KEYWORDS.clear();
+            }
+        }
+    };
     private final Runnable mRunnable = new Runnable() {
         @SuppressLint("SetTextI18n")
         @Override
@@ -165,6 +179,10 @@ public class HomeActivity extends BaseActivity {
     protected void init() {
         // 每次进入首页（含重启 App、切换首页数据源后重建界面）都要重新输密码
         UNLOCKED_PROTECTED_KEYWORDS.clear();
+        try {
+            registerReceiver(screenOffReceiver, new IntentFilter(Intent.ACTION_SCREEN_OFF));
+        } catch (Throwable ignored) {
+        }
         EventBus.getDefault().register(this);
         eventBusRegistered = true;
         ControlManager.get().startServer();
@@ -720,6 +738,24 @@ public class HomeActivity extends BaseActivity {
         mHandler.removeCallbacks(mRunnable);
     }
 
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // 熄屏/待机后回来（部分机型不发 SCREEN_OFF 广播），这里再兜一层
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm == null) {
+                return;
+            }
+            boolean screenOn = Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH
+                    ? pm.isInteractive() : pm.isScreenOn();
+            if (!screenOn) {
+                UNLOCKED_PROTECTED_KEYWORDS.clear();
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void refreshTopInfoTextSize() {
         if (tvName == null || tvDate == null) {
             return;
@@ -973,6 +1009,10 @@ public class HomeActivity extends BaseActivity {
     protected void onDestroy() {
         dismissHomeDialogs();
         mHandler.removeCallbacksAndMessages(null);
+        try {
+            unregisterReceiver(screenOffReceiver);
+        } catch (Throwable ignored) {
+        }
         super.onDestroy();
         unregisterEventBus();
         if (isFinishing()) {
