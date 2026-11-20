@@ -36,6 +36,7 @@ import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.ImgUtil;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.ProtectedRecentHelper;
+import com.github.tvbox.osc.util.ProtectedZoneHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
 import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
@@ -100,8 +101,12 @@ public class GridFragment extends BaseLazyFragment {
         return this;
     }
 
-    /** 当前分类是不是需要密码的（伦理），用于决定详情页是否写播放历史 */
+    /** 当前分类是不是需要密码的（伦理），或者整个仓就是「国外频道」；
+     *  这两种情况都不写播放历史、看过的排最前 */
     private boolean isProtectedCategory() {
+        if (ProtectedZoneHelper.isInForeignWarehouse()) {
+            return true;
+        }
         return sortData != null && sortData.name != null && sortData.name.contains("伦理");
     }
 

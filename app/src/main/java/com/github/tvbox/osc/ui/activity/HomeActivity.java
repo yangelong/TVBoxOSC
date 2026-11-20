@@ -62,6 +62,7 @@ import com.github.tvbox.osc.util.DefaultConfig;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
+import com.github.tvbox.osc.util.HistoryHelper;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.MD5;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
@@ -204,6 +205,8 @@ public class HomeActivity extends BaseActivity {
             Bundle bundle = intent.getExtras();
             useCacheConfig = bundle.getBoolean("useCache", false);
         }
+        // 多仓时冷启动默认把仓切回「极速频道」（必须在加载配置之前）
+        applyStartupWarehouse();
         initData();
     }
 
@@ -372,6 +375,7 @@ public class HomeActivity extends BaseActivity {
                     return;
                 }
                 SourceBean home = ApiConfig.get().getHomeSourceBean();
+                mHandler.removeCallbacks(sourceSwitchWatchdog);
                 showSuccess();
                 clearHomePages();
                 List<MovieSort.SortData> newSortData;
@@ -379,6 +383,18 @@ public class HomeActivity extends BaseActivity {
                     newSortData = DefaultConfig.adjustSort(ApiConfig.get().getHomeSourceBean().getKey(), absXml.classes.sortList, true);
                 } else {
                     newSortData = DefaultConfig.adjustSort(ApiConfig.get().getHomeSourceBean().getKey(), new ArrayList<>(), true);
+                }
+                // 这个数据源一个栏目都没有（有些源本身是空的），自动换到下一个能用的
+                if (newSortData.size() <= 1 && previousHomeSource != null) {
+                    String failedKey = loadingSourceKey;
+                    if (failedKey == null && home != null) {
+                        failedKey = home.getKey();
+                    }
+                    skipBrokenSource(failedKey);
+                    return;
+                }
+                if (home != null && home.getKey() != null) {
+                    clearDeadHomeSource(home.getKey());
                 }
                 updateSortData(newSortData);
                 initViewPager(absXml);
@@ -399,6 +415,8 @@ public class HomeActivity extends BaseActivity {
 
     private void initData() {
         if (dataInitOk && jarInitOk) {
+            // 每次冷启动 App，首页数据源都回到「极速频道」
+            applyStartupDefaultSource();
             loadHomeSort(false);
             if (hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 LOG.e("有");
@@ -544,6 +562,199 @@ public class HomeActivity extends BaseActivity {
         }, this);
     }
 
+    private static final long SOURCE_SWITCH_TIMEOUT_MS = 12000L;
+    private static final String DEAD_HOME_SOURCE_KEY = "home_dead_source_map";
+    private static final long DEAD_HOME_SOURCE_TTL_MS = 6L * 60 * 60 * 1000;
+    /** 冷启动默认切到这个数据源 */
+    private static final String STARTUP_DEFAULT_SOURCE_KEYWORD = "极速频道";
+    private static boolean startupSourceApplied = false;
+    private static boolean startupWarehouseApplied = false;
+
+    /** 切换数据源卡住超过 12 秒，就当成这个源是坏的，自动换下一个 */
+    private final Runnable sourceSwitchWatchdog = new Runnable() {
+        @Override
+        public void run() {
+            if (!homeSortLoading) {
+                return;
+            }
+            String key = loadingSourceKey;
+            if (key == null) {
+                return;
+            }
+            markDeadHomeSource(key);
+            skipBrokenSource(key);
+        }
+    };
+
+    private org.json.JSONObject loadDeadHomeSourceMap() {
+        try {
+            return new org.json.JSONObject(Hawk.get(DEAD_HOME_SOURCE_KEY, "{}"));
+        } catch (Throwable ignored) {
+            return new org.json.JSONObject();
+        }
+    }
+
+    private boolean isDeadHomeSource(String key) {
+        if (key == null) {
+            return false;
+        }
+        try {
+            org.json.JSONObject map = loadDeadHomeSourceMap();
+            long at = map.optLong(key, 0L);
+            if (at <= 0L) {
+                return false;
+            }
+            if (System.currentTimeMillis() - at > DEAD_HOME_SOURCE_TTL_MS) {
+                map.remove(key);
+                Hawk.put(DEAD_HOME_SOURCE_KEY, map.toString());
+                return false;
+            }
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void markDeadHomeSource(String key) {
+        if (key == null) {
+            return;
+        }
+        try {
+            org.json.JSONObject map = loadDeadHomeSourceMap();
+            map.put(key, System.currentTimeMillis());
+            Hawk.put(DEAD_HOME_SOURCE_KEY, map.toString());
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void clearDeadHomeSource(String key) {
+        if (key == null) {
+            return;
+        }
+        try {
+            org.json.JSONObject map = loadDeadHomeSourceMap();
+            if (map.has(key)) {
+                map.remove(key);
+                Hawk.put(DEAD_HOME_SOURCE_KEY, map.toString());
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** 目标源打不开/没有栏目时，自动顺着列表找下一个能用的源 */
+    private void skipBrokenSource(String failedKey) {
+        mHandler.removeCallbacks(sourceSwitchWatchdog);
+        homeSortLoading = false;
+        loadingSourceKey = null;
+        markDeadHomeSource(failedKey);
+        SourceBean previous = previousHomeSource;
+        List<SourceBean> sites = ApiConfig.get().getSwitchSourceBeanList();
+        SourceBean current = ApiConfig.get().getHomeSourceBean();
+        if (sites == null || sites.size() <= 1 || current == null) {
+            // 只有一个数据源，没得替补，退回原来的
+            Toast.makeText(HomeActivity.this, "该数据源暂无内容，已退回原数据源", Toast.LENGTH_SHORT).show();
+            cancelHomeSortLoading();
+            return;
+        }
+        int index = 0;
+        for (int i = 0; i < sites.size(); i++) {
+            SourceBean bean = sites.get(i);
+            if (bean != null && bean.getKey() != null && bean.getKey().equals(current.getKey())) {
+                index = i;
+                break;
+            }
+        }
+        for (int step = 1; step <= sites.size(); step++) {
+            SourceBean next = sites.get((index + step) % sites.size());
+            if (next == null || next.getKey() == null) {
+                continue;
+            }
+            if (failedKey != null && next.getKey().equals(failedKey)) {
+                continue;
+            }
+            if (isDeadHomeSource(next.getKey())) {
+                continue;
+            }
+            if (needPasswordForSource(next)) {
+                // 要密码的源不替用户自动跳
+                continue;
+            }
+            String nextName = next.getName() == null ? "下一个数据源" : next.getName();
+            Toast.makeText(HomeActivity.this, "该数据源暂无内容，已切到「" + nextName + "」", Toast.LENGTH_SHORT).show();
+            previousHomeSource = previous;
+            ApiConfig.get().setSourceBean(next);
+            refreshHome(false);
+            return;
+        }
+        cancelHomeSortLoading();
+    }
+
+    /** 冷启动（App 重新打开）默认切回「极速频道」 */
+    private void applyStartupDefaultSource() {
+        if (startupSourceApplied) {
+            return;
+        }
+        startupSourceApplied = true;
+        try {
+            List<SourceBean> sites = ApiConfig.get().getSwitchSourceBeanList();
+            if (sites == null || sites.isEmpty()) {
+                return;
+            }
+            SourceBean current = ApiConfig.get().getHomeSourceBean();
+            for (SourceBean bean : sites) {
+                if (bean == null || bean.getName() == null || bean.getKey() == null) {
+                    continue;
+                }
+                if (!bean.getName().contains(STARTUP_DEFAULT_SOURCE_KEYWORD)) {
+                    continue;
+                }
+                if (current != null && bean.getKey().equals(current.getKey())) {
+                    return;
+                }
+                ApiConfig.get().setSourceBean(bean);
+                return;
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * 多仓情况下，冷启动（App 重新打开）默认把线路切回「极速频道」那个仓。
+     * 必须在加载配置之前调用，否则新仓的配置不会被读取。
+     */
+    private void applyStartupWarehouse() {
+        if (startupWarehouseApplied) {
+            return;
+        }
+        startupWarehouseApplied = true;
+        try {
+            ArrayList<String> lines = Hawk.get(HawkConfig.API_LINE_LIST, new ArrayList<String>());
+            if (lines == null || lines.size() <= 1) {
+                // 单仓，不需要切
+                return;
+            }
+            String current = Hawk.get(HawkConfig.API_URL, "");
+            for (String line : lines) {
+                String name = HistoryHelper.getApiLineName(line);
+                if (name == null || !name.contains(STARTUP_DEFAULT_SOURCE_KEYWORD)) {
+                    continue;
+                }
+                String url = HistoryHelper.getApiLineUrl(line);
+                if (url == null || url.isEmpty()) {
+                    return;
+                }
+                if (url.equals(current)) {
+                    return;
+                }
+                Hawk.put(HawkConfig.API_URL, url);
+                Hawk.put(HawkConfig.LIVE_API_URL, url);
+                HistoryHelper.setLiveApiHistory(url);
+                return;
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void loadHomeSort(boolean keepCurrentContent) {
         SourceBean home = ApiConfig.get().getHomeSourceBean();
         homeSortLoading = keepCurrentContent;
@@ -561,7 +772,15 @@ public class HomeActivity extends BaseActivity {
         if (!keepCurrentContent) {
             showLoading();
         }
-        sourceViewModel.getSort(loadingSourceKey);
+        boolean switching = keepCurrentContent && previousHomeSource != null;
+        if (switching) {
+            // 切换数据源：跳过「首页推荐」那次额外请求，并把超时看门狗挂上
+            mHandler.removeCallbacks(sourceSwitchWatchdog);
+            mHandler.postDelayed(sourceSwitchWatchdog, SOURCE_SWITCH_TIMEOUT_MS);
+            sourceViewModel.getSortSkipHomeRec(loadingSourceKey);
+        } else {
+            sourceViewModel.getSort(loadingSourceKey);
+        }
     }
 
     private void initViewPager(AbsSortXml absXml) {
@@ -1185,6 +1404,12 @@ public class HomeActivity extends BaseActivity {
     }
 
     private void applyHomeSource(SourceBean value) {
+        if (value == null) {
+            return;
+        }
+        // 换数据源/换仓一律重新要伦理密码，并且清掉「坏源」记录（用户手动点的就再试一次）
+        lockProtectedCategories();
+        clearDeadHomeSource(value.getKey());
         previousHomeSource = ApiConfig.get().getHomeSourceBean();
         ApiConfig.get().setSourceBean(value);
         refreshHome(false);
@@ -1290,6 +1515,7 @@ public class HomeActivity extends BaseActivity {
     private void refreshEmpty()
     {
         skipNextUpdate=true;
+        mHandler.removeCallbacks(sourceSwitchWatchdog);
         showSuccess();
         cancelHomeSortLoading();
         clearHomePages();
@@ -1311,6 +1537,7 @@ public class HomeActivity extends BaseActivity {
     }
 
     private void cancelHomeSortLoading() {
+        mHandler.removeCallbacks(sourceSwitchWatchdog);
         homeSortLoading = false;
         loadingSourceKey = null;
         tvName.clearAnimation();

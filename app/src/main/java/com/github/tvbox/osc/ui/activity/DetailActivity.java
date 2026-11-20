@@ -53,6 +53,7 @@ import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.MD5;
 import com.github.tvbox.osc.util.ProtectedRecentHelper;
+import com.github.tvbox.osc.util.ProtectedZoneHelper;
 import com.github.tvbox.osc.util.SearchHelper;
 import com.github.tvbox.osc.util.SubtitleHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
@@ -1025,6 +1026,10 @@ public class DetailActivity extends BaseActivity {
             vod_picture=bundle.getString("picture", "");
             fromCollect = bundle.getBoolean("collect", false);
             fromProtectedCategory = bundle.getBoolean("protectedCategory", false);
+            // 整个「国外频道」仓都算保护区：不写播放历史，并记进「最近看过」
+            if (!fromProtectedCategory && ProtectedZoneHelper.isInForeignWarehouse()) {
+                fromProtectedCategory = true;
+            }
             if (fromProtectedCategory) {
                 // 伦理栏目单独的浏览记录：不写播放历史，但要让「刚看过的」在栏目里排最前
                 String recentId = bundle.getString("id", null);
