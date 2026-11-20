@@ -52,6 +52,7 @@ import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.MD5;
+import com.github.tvbox.osc.util.ProtectedRecentHelper;
 import com.github.tvbox.osc.util.SearchHelper;
 import com.github.tvbox.osc.util.SubtitleHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
@@ -1024,6 +1025,13 @@ public class DetailActivity extends BaseActivity {
             vod_picture=bundle.getString("picture", "");
             fromCollect = bundle.getBoolean("collect", false);
             fromProtectedCategory = bundle.getBoolean("protectedCategory", false);
+            if (fromProtectedCategory) {
+                // 伦理栏目单独的浏览记录：不写播放历史，但要让「刚看过的」在栏目里排最前
+                String recentId = bundle.getString("id", null);
+                if (!TextUtils.isEmpty(recentId) && !recentId.startsWith("msearch:")) {
+                    ProtectedRecentHelper.record(bundle.getString("sourceKey", ""), recentId, vod_name, vod_picture);
+                }
+            }
             Object fallbackCandidates = bundle.getSerializable(EXTRA_DETAIL_FALLBACK_CANDIDATES);
             if (fallbackCandidates instanceof ArrayList) {
                 cacheDetailFallbackCandidates(vod_name, (ArrayList<Movie.Video>) fallbackCandidates);

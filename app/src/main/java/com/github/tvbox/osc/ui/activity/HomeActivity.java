@@ -118,13 +118,14 @@ public class HomeActivity extends BaseActivity {
     private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理"};
     private static final String PROTECTED_CATEGORY_PASSWORD = "104";
     private static final Set<String> UNLOCKED_PROTECTED_KEYWORDS = new HashSet<>();
-    private boolean categoryPasswordShowing = false;
+    // 当前正在显示的分类密码框；用引用而不是布尔标记，避免对话框被系统回收后标记卡在 true
+    private NumericPasswordDialog categoryPasswordDialog = null;
     // 熄屏/锁屏后回来，伦理密码要重新输入
     private final BroadcastReceiver screenOffReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
-                UNLOCKED_PROTECTED_KEYWORDS.clear();
+                lockProtectedCategories();
             }
         }
     };
@@ -179,6 +180,11 @@ public class HomeActivity extends BaseActivity {
     protected void init() {
         // 每次进入首页（含重启 App、切换首页数据源后重建界面）都要重新输密码
         UNLOCKED_PROTECTED_KEYWORDS.clear();
+        categoryPasswordDialog = null;
+        try {
+            unregisterReceiver(screenOffReceiver);
+        } catch (Throwable ignored) {
+        }
         try {
             registerReceiver(screenOffReceiver, new IntentFilter(Intent.ACTION_SCREEN_OFF));
         } catch (Throwable ignored) {
@@ -750,7 +756,7 @@ public class HomeActivity extends BaseActivity {
             boolean screenOn = Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH
                     ? pm.isInteractive() : pm.isScreenOn();
             if (!screenOn) {
-                UNLOCKED_PROTECTED_KEYWORDS.clear();
+                lockProtectedCategories();
             }
         } catch (Throwable ignored) {
         }
@@ -780,7 +786,7 @@ public class HomeActivity extends BaseActivity {
             }
         } else if (event.type == RefreshEvent.TYPE_HOME_SOURCE_CHANGE) {
             // 换了首页站源/点播源，密码重新输
-            UNLOCKED_PROTECTED_KEYWORDS.clear();
+            lockProtectedCategories();
             refreshHome(false);
         } else if (event.type == RefreshEvent.TYPE_CATEGORY_EMPTY) {
             hideEmptyCategory((String) event.obj);
@@ -852,22 +858,75 @@ public class HomeActivity extends BaseActivity {
         if (UNLOCKED_PROTECTED_KEYWORDS.contains(keyword)) {
             return true;
         }
-        if (!categoryPasswordShowing) {
-            showCategoryPasswordDialog(sortData, keyword);
+        if (isCategoryPasswordShowing()) {
+            // 已经在弹密码框了，别重复弹
+            return false;
         }
+        showCategoryPasswordDialog(sortData, keyword);
         return false;
     }
 
+    private boolean isCategoryPasswordShowing() {
+        return categoryPasswordDialog != null && categoryPasswordDialog.isShowing();
+    }
+
+    /** 关掉可能还挂着的密码框（锁屏、切源、页面销毁时用），并把标记一起复位 */
+    private void dismissCategoryPasswordDialog() {
+        NumericPasswordDialog dialog = categoryPasswordDialog;
+        categoryPasswordDialog = null;
+        if (dialog != null) {
+            try {
+                if (dialog.isShowing()) {
+                    dialog.dismiss();
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    /**
+     * 熄屏/锁屏/重新进 App 时的锁定动作：清掉解锁标记，并把当前停在伦理页的界面退回第一个栏目，
+     * 保证回到前台时伦理内容不会直接显示出来。
+     */
+    private void lockProtectedCategories() {
+        UNLOCKED_PROTECTED_KEYWORDS.clear();
+        dismissCategoryPasswordDialog();
+        try {
+            if (sortAdapter == null || currentSelected <= 0) {
+                return;
+            }
+            List<MovieSort.SortData> data = sortAdapter.getData();
+            if (currentSelected >= data.size()) {
+                return;
+            }
+            if (matchedProtectedKeyword(data.get(currentSelected).name) == null) {
+                return;
+            }
+            sortChange = false;
+            currentSelected = 0;
+            sortFocused = 0;
+            if (mViewPager != null) {
+                mViewPager.setCurrentItem(0, false);
+            }
+            changeTop(false);
+            if (mGridView != null) {
+                mGridView.setSelectedPosition(0);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void showCategoryPasswordDialog(final MovieSort.SortData sortData, final String keyword) {
-        if (isFinishing()) {
+        if (isActivityUnavailable()) {
             return;
         }
-        categoryPasswordShowing = true;
+        // 防御：先清掉残留的旧对话框，避免「点栏目只选中、密码框不弹」
+        dismissCategoryPasswordDialog();
         NumericPasswordDialog dialog = new NumericPasswordDialog(this, sortData.name + " · 需要密码");
         dialog.setOnListener(new NumericPasswordDialog.OnListener() {
             @Override
             public void onSubmit(String password) {
-                categoryPasswordShowing = false;
+                categoryPasswordDialog = null;
                 if (PROTECTED_CATEGORY_PASSWORD.equals(password)) {
                     UNLOCKED_PROTECTED_KEYWORDS.add(keyword);
                     int position = sortAdapter.getData().indexOf(sortData);
@@ -883,11 +942,28 @@ public class HomeActivity extends BaseActivity {
 
             @Override
             public void onCancel() {
-                categoryPasswordShowing = false;
+                categoryPasswordDialog = null;
                 restoreCategorySelection();
             }
         });
-        dialog.show();
+        dialog.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(android.content.DialogInterface d) {
+                if (categoryPasswordDialog == d) {
+                    categoryPasswordDialog = null;
+                }
+            }
+        });
+        categoryPasswordDialog = dialog;
+        try {
+            dialog.show();
+        } catch (Throwable th) {
+            // 弹不出来（窗口已失效/页面正在销毁）时不能把标记留在 true，否则下次点伦理就彻底没反应
+            if (categoryPasswordDialog == dialog) {
+                categoryPasswordDialog = null;
+            }
+            restoreCategorySelection();
+        }
     }
 
     private void restoreCategorySelection() {
@@ -1133,6 +1209,7 @@ public class HomeActivity extends BaseActivity {
     private void dismissHomeDialogs() {
         dismissConfigErrorDialog();
         dismissSiteSwitchDialog();
+        dismissCategoryPasswordDialog();
     }
 
     private void dismissConfigErrorDialog() {

@@ -70,8 +70,23 @@ public class NumericPasswordDialog extends BaseDialog {
         showPassword();
     }
 
+    /** 隐私显示：已输入的位数用星号代替，不显示真实数字 */
     private void showPassword() {
-        passwordView.setText(password.toString());
+        if (passwordView == null) {
+            return;
+        }
+        if (password.length() == 0) {
+            passwordView.setText("");
+            return;
+        }
+        StringBuilder masked = new StringBuilder();
+        for (int i = 0; i < password.length(); i++) {
+            if (i > 0) {
+                masked.append(' ');
+            }
+            masked.append('*');
+        }
+        passwordView.setText(masked.toString());
     }
 
     private void submit() {

@@ -35,6 +35,7 @@ import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.ImgUtil;
 import com.github.tvbox.osc.util.LOG;
+import com.github.tvbox.osc.util.ProtectedRecentHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
 import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
@@ -386,6 +387,37 @@ public class GridFragment extends BaseLazyFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        applyProtectedRecentOrder();
+    }
+
+    /** 伦理栏目从详情页返回后，把刚看过的那部影片挪到最前面 */
+    private void applyProtectedRecentOrder() {
+        if (!isProtectedCategory() || gridAdapter == null || !isLoad) {
+            return;
+        }
+        try {
+            List<Movie.Video> data = gridAdapter.getData();
+            if (data == null || data.isEmpty()) {
+                return;
+            }
+            List<Movie.Video> ordered = ProtectedRecentHelper.reorder(data);
+            boolean changed = false;
+            for (int i = 0; i < ordered.size(); i++) {
+                if (ordered.get(i) != data.get(i)) {
+                    changed = true;
+                    break;
+                }
+            }
+            if (changed) {
+                gridAdapter.setNewData(ordered);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    @Override
     protected void showEmpty() {
         super.showEmpty();
         bindPullRefreshTouch(loadSirView);
@@ -402,8 +434,13 @@ public class GridFragment extends BaseLazyFragment {
                     if (page == 1) {
                         showSuccess();
                         isLoad = true;
-                        hasActionItems = hasActionVideo(absXml.movie.videoList);
-                        gridAdapter.setNewData(absXml.movie.videoList);
+                        List<Movie.Video> videos = absXml.movie.videoList;
+                        if (isProtectedCategory()) {
+                            // 伦理栏目：最近看过的影片排到最前面
+                            videos = ProtectedRecentHelper.reorder(videos);
+                        }
+                        hasActionItems = hasActionVideo(videos);
+                        gridAdapter.setNewData(videos);
                     } else {
                         hasActionItems = hasActionItems || hasActionVideo(absXml.movie.videoList);
                         gridAdapter.addData(absXml.movie.videoList);
