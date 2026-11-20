@@ -12,7 +12,8 @@ public class DanmuHelper {
     };
 
     public static boolean isOpen() {
-        return Hawk.get(HawkConfig.DANMU_OPEN, true);
+        // 默认关闭弹幕：用户未手动开启过时，不再自动加载弹幕
+        return Hawk.get(HawkConfig.DANMU_OPEN, false);
     }
 
     public static void setOpen(boolean open) {

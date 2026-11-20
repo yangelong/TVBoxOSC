@@ -58,7 +58,7 @@ public class MusicPlaybackService extends Service {
 
     private MediaSessionCompat mediaSession;
     private PendingIntent sessionActivity;
-    private String title = "TVBox";
+    private String title = "影视盒子";
     private String subtitle = "";
     private String artworkUrl = "";
     private Bitmap artwork;

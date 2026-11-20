@@ -883,7 +883,7 @@ public class DetailActivity extends BaseActivity {
                     mVideo = absXml.movie.videoList.get(0);
                     mVideo.id = vodId;
                     if (TextUtils.isEmpty(mVideo.name))mVideo.name = vod_name;
-                    if (TextUtils.isEmpty(mVideo.name))mVideo.name = "TVBox";
+                    if (TextUtils.isEmpty(mVideo.name))mVideo.name = "影视盒子";
                     vodInfo = new VodInfo();
                     routeSwitchSeries = null;
                     if((mVideo.pic==null || mVideo.pic.isEmpty()) && !vod_picture.isEmpty()){
