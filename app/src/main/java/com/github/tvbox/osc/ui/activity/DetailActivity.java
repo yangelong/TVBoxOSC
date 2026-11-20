@@ -1616,7 +1616,7 @@ public class DetailActivity extends BaseActivity {
     private void switchSearchWord(String word) {
         OkGo.getInstance().cancelTag("quick_search");
         quickSearchData.clear();
-        searchTitle = word;
+        searchTitle = SearchHelper.cleanQuery(word);
         searchResult();
     }
 
@@ -1630,9 +1630,9 @@ public class DetailActivity extends BaseActivity {
         pauseRunnable = null;
         OkGo.getInstance().cancelTag("quick_search");
         quickSearchWord.clear();
-        searchTitle = mVideo.name;
+        searchTitle = SearchHelper.cleanQuery(mVideo.name);
         quickSearchData.clear();
-        quickSearchWord.addAll(SearchHelper.splitWords(searchTitle));
+        quickSearchWord.addAll(SearchHelper.splitWords(mVideo.name));
 
         searchResult();
     }

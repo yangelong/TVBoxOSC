@@ -749,38 +749,48 @@ public class HomeActivity extends BaseActivity {
     }
 
     private boolean isProtectedCategory(String name) {
+        return matchedProtectedKeyword(name) != null;
+    }
+
+    /** 命中的保护关键字（如「伦理」），没命中返回 null */
+    private String matchedProtectedKeyword(String name) {
         if (name == null || name.isEmpty()) {
-            return false;
+            return null;
         }
         for (String keyword : PROTECTED_CATEGORY_KEYWORDS) {
             if (name.contains(keyword)) {
-                return true;
+                return keyword;
             }
         }
-        return false;
+        return null;
     }
 
     /**
      * 进入分类前的密码校验。返回 true 表示允许进入。
+     * 解锁状态按「关键字」记，切了首页数据源后同一个「伦理」栏目不用重新输密码。
      */
     private boolean canEnterCategory(int position) {
         if (sortAdapter == null || position < 0 || position >= sortAdapter.getData().size()) {
             return true;
         }
         MovieSort.SortData sortData = sortAdapter.getData().get(position);
-        if (sortData == null || !isProtectedCategory(sortData.name)) {
+        if (sortData == null) {
             return true;
         }
-        if (unlockedProtectedCategories.contains(sortData.id)) {
+        String keyword = matchedProtectedKeyword(sortData.name);
+        if (keyword == null) {
+            return true;
+        }
+        if (unlockedProtectedCategories.contains(keyword)) {
             return true;
         }
         if (!categoryPasswordShowing) {
-            showCategoryPasswordDialog(sortData);
+            showCategoryPasswordDialog(sortData, keyword);
         }
         return false;
     }
 
-    private void showCategoryPasswordDialog(final MovieSort.SortData sortData) {
+    private void showCategoryPasswordDialog(final MovieSort.SortData sortData, final String keyword) {
         if (isFinishing()) {
             return;
         }
@@ -791,7 +801,7 @@ public class HomeActivity extends BaseActivity {
             public void onSubmit(String password) {
                 categoryPasswordShowing = false;
                 if (PROTECTED_CATEGORY_PASSWORD.equals(password)) {
-                    unlockedProtectedCategories.add(sortData.id);
+                    unlockedProtectedCategories.add(keyword);
                     int position = sortAdapter.getData().indexOf(sortData);
                     sortFocused = position < 0 ? currentSelected : position;
                     sortChange = true;

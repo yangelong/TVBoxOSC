@@ -537,7 +537,8 @@ public class FastSearchActivity extends BaseActivity {
     private void search(String title) {
         cancel();
         showLoading();
-        this.searchTitle = title;
+        // 去掉搜索词里的空格，避免站点把它当成多个关键词
+        this.searchTitle = SearchHelper.cleanQuery(title);
         fenci();
         mGridView.setVisibility(View.INVISIBLE);
         mGridViewFilter.setVisibility(View.GONE);

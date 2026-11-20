@@ -93,6 +93,18 @@ public class SearchHelper {
         List<Movie.Video> results = new ArrayList<>(videos);
         final String keyword = normalizeSearchText(searchTitle);
         if (keyword.isEmpty() || results.size() < 2) return results;
+        // 只保留与搜索词等效的结果：奔跑吧兄弟第十季 / 奔跑吧兄弟第10季 / 奔跑吧兄弟第十部 都算等效，
+        // 其它靠分词凑出来的不相干条目不再混进结果里
+        List<Movie.Video> equivalent = new ArrayList<>();
+        for (Movie.Video video : results) {
+            String name = normalizeSearchText(video == null ? null : video.name);
+            if (name.contains(keyword)) {
+                equivalent.add(video);
+            }
+        }
+        if (!equivalent.isEmpty()) {
+            results = equivalent;
+        }
         final HashMap<Movie.Video, Integer> scores = new HashMap<>();
         for (Movie.Video video : results) {
             String name = normalizeSearchText(video == null ? null : video.name);
@@ -110,6 +122,17 @@ public class SearchHelper {
     }
 
     /**
+     * 实际发往站点的搜索词：去掉所有空白（「奔跑吧兄弟第 10 季」→「奔跑吧兄弟第10季」）。
+     * 带空格的词会让站点把空格两侧当成两个关键词，搜出一堆不相干的片子。
+     */
+    public static String cleanQuery(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.replaceAll("\\s+", "").trim();
+    }
+
+    /**
      * 搜索匹配用的归一化：让「第 12 集」「第十二集」「12季」「十二部」这类写法互相等效。
      * 规则：1、去空白；2、中文数字与阿拉伯数字等效；3、去掉数字前的「第」；4、集/季/部 等效为「季」。
      */
@@ -118,6 +141,8 @@ public class SearchHelper {
             return "";
         }
         String result = text.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
+        // 去掉书名号/括号/标点等装饰，避免「《奔跑吧兄弟》第十季」和「奔跑吧兄弟第十季」对不上
+        result = result.replaceAll("[《》〈〉【】\\[\\]（）()「」『』{}、，,。.：:；;！!？?·\\-_/\\\\|'\"“”‘’~]", "");
         result = chineseNumberToArabic(result);
         result = result.replace("第", "");
         return result.replace("集", "季").replace("部", "季");
@@ -217,55 +242,68 @@ public class SearchHelper {
         }
     }
 
+    /**
+     * 搜索框下面的候选词（只用来让用户点选，绝不拿来发起搜索）：
+     * 1、去掉季号后的主名，例「奔跑吧兄弟」；
+     * 2、主名按「吧/的/之」这类连接字再拆短，例「奔跑吧」「兄弟」；
+     * 3、季候选词，例「奔跑吧兄弟第一季」…「第十季」，方便直接点到某一季。
+     */
     public static List<String> splitWords(String text) {
         List<String> result = new ArrayList<>();
-        if (text == null || text.trim().isEmpty()) {
+        if (text == null) {
             return result;
         }
-        result.add(text);
-        String[] parts = text.split("\\W+");
-        if (parts.length > 1) {
-            result.addAll(Arrays.asList(parts));
+        String title = cleanQuery(text);
+        if (title.isEmpty()) {
+            return result;
         }
-        Matcher matcher = SEASON_SUFFIX_PATTERN.matcher(text.trim());
+        java.util.LinkedHashSet<String> words = new java.util.LinkedHashSet<>();
+        String baseName = title;
+        Matcher matcher = SEASON_SUFFIX_PATTERN.matcher(title);
         if (matcher.matches()) {
-            String baseName = matcher.group(1).trim();
-            if (!baseName.isEmpty()
-                    && !Character.isDigit(baseName.charAt(baseName.length() - 1))
-                    && !result.contains(baseName)) {
-                result.add(baseName);
-            }
-            String season = matcher.group(3) == null ? matcher.group(5) : matcher.group(3);
-            if (!baseName.isEmpty() && season != null) {
-                String nextSeason = nextSeason(season);
-                if (nextSeason != null) {
-                    String prefix = matcher.group(3) == null || matcher.group(2) == null ? "" : matcher.group(2);
-                    String suffix = matcher.group(3) == null || matcher.group(4) == null ? "" : matcher.group(4);
-                    String nextTitle = baseName + prefix + nextSeason + suffix;
-                    if (!result.contains(nextTitle)) {
-                        result.add(nextTitle);
-                    }
-                }
+            String candidate = matcher.group(1) == null ? "" : matcher.group(1).trim();
+            if (!candidate.isEmpty()) {
+                baseName = candidate;
             }
         }
+        if (!baseName.isEmpty()) {
+            words.add(baseName);
+        }
+        words.addAll(splitBaseName(baseName));
+        for (int i = 1; i <= 10; i++) {
+            if (!baseName.isEmpty()) {
+                words.add(baseName + CHINESE_NUMBERS[i] + "季");
+            }
+        }
+        result.addAll(words);
         return result;
     }
 
-    private static String nextSeason(String season) {
-        String value = season.trim();
-        try {
-            return String.valueOf(Integer.parseInt(value) + 1);
-        } catch (NumberFormatException ignored) {
-            if ("两".equals(value)) {
-                return "三";
-            }
-            for (int i = 0; i < CHINESE_NUMBERS.length - 1; i++) {
-                if (CHINESE_NUMBERS[i].equals(value)) {
-                    return CHINESE_NUMBERS[i + 1];
-                }
-            }
-            return null;
+    /** 在「吧/的/之」这种连接字后面断开，拆出更短的候选词 */
+    private static List<String> splitBaseName(String baseName) {
+        List<String> result = new ArrayList<>();
+        if (baseName == null || baseName.length() < 3) {
+            return result;
         }
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < baseName.length(); i++) {
+            char c = baseName.charAt(i);
+            builder.append(c);
+            if (c == '吧' || c == '的' || c == '之') {
+                String piece = builder.toString();
+                if (piece.length() >= 2) {
+                    result.add(piece);
+                }
+                builder.setLength(0);
+            }
+        }
+        String tail = builder.toString();
+        if (tail.length() >= 2 && !result.isEmpty()) {
+            result.add(tail);
+        } else if (tail.length() >= 2 && result.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return result;
     }
 
 }

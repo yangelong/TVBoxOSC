@@ -1,6 +1,7 @@
 package com.github.tvbox.osc.ui.adapter;
 
 import android.view.View;
+import android.view.ViewGroup;
 
 import com.chad.library.adapter.base.BaseQuickAdapter;
 import com.chad.library.adapter.base.BaseViewHolder;
@@ -22,7 +23,25 @@ public class SortAdapter extends BaseQuickAdapter<MovieSort.SortData, BaseViewHo
     @Override
     protected void convert(BaseViewHolder helper, MovieSort.SortData item) {
         helper.setText(R.id.tvTitle, item.name);
-        // 该分类加载后没有任何数据，直接隐藏，不在首页显示空栏目
-        helper.itemView.setVisibility(item.hidden ? View.GONE : View.VISIBLE);
+        // 该分类加载后没有任何数据，把它彻底收成 0 宽并去掉焦点：后面的分类会顶上来，不留空位
+        View itemView = helper.itemView;
+        ViewGroup.LayoutParams params = itemView.getLayoutParams();
+        if (item.hidden) {
+            itemView.setVisibility(View.GONE);
+            itemView.setFocusable(false);
+            itemView.setClickable(false);
+            if (params != null && params.width != 0) {
+                params.width = 0;
+                itemView.setLayoutParams(params);
+            }
+            return;
+        }
+        if (params != null && params.width == 0) {
+            params.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            itemView.setLayoutParams(params);
+        }
+        itemView.setVisibility(View.VISIBLE);
+        itemView.setFocusable(true);
+        itemView.setClickable(true);
     }
 }
