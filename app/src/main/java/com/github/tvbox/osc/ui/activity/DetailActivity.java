@@ -52,6 +52,7 @@ import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.MD5;
+import com.github.tvbox.osc.util.ProtectedIdStore;
 import com.github.tvbox.osc.util.ProtectedRecentHelper;
 import com.github.tvbox.osc.util.ProtectedZoneHelper;
 import com.github.tvbox.osc.util.SearchHelper;
@@ -1035,6 +1036,8 @@ public class DetailActivity extends BaseActivity {
                 String recentId = bundle.getString("id", null);
                 if (!TextUtils.isEmpty(recentId) && !recentId.startsWith("msearch:")) {
                     ProtectedRecentHelper.record(bundle.getString("sourceKey", ""), recentId, vod_name, vod_picture);
+                    // 同时记进搜索排除名单：这类片以后搜不出来
+                    ProtectedIdStore.mark(bundle.getString("sourceKey", ""), recentId);
                 }
             }
             Object fallbackCandidates = bundle.getSerializable(EXTRA_DETAIL_FALLBACK_CANDIDATES);

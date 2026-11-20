@@ -835,6 +835,8 @@ public class ModelSettingFragment extends BaseLazyFragment {
             SourceViewModel.clearRuntimeCache();
             // 清缓存也把「空栏目」记录一起清掉，让栏目重新判定一次
             com.github.tvbox.osc.util.EmptyCategoryStore.clearAll();
+            // 保护区影片 id 黑名单同样重置（换了源/清了缓存就重新记）
+            com.github.tvbox.osc.util.ProtectedIdStore.clearAll();
 //            FileUtils.clearSpiderCacheFiles();
             LOG.i("echo-clear-config-switch-cache");
         } catch (Exception e) {
