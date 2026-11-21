@@ -110,7 +110,11 @@ public class ProtectedZoneHelper {
         ADULT_QUERY_UNLOCKED.clear();
     }
 
-    /** 命中的保护关键字，没命中返回 null；名字做了去空格/全角空格处理 */
+    /**
+     * 命中的保护关键字，没命中返回 null；名字做了去空格/全角空格处理。
+     * 先看固定的伦理/理论类关键字，再拿成人搜索词表去比栏目名——
+     * 这样「无码流出」「自拍偷拍」「里番动漫」「三级伦理」「日本有码」这些栏目进的时候也要密码。
+     */
     public static String matchedProtectedCategoryKeyword(String name) {
         if (name == null || name.isEmpty()) {
             return null;
@@ -118,6 +122,12 @@ public class ProtectedZoneHelper {
         String normalized = name.replace(" ", "").replace("\u3000", "").replace("\t", "");
         for (String keyword : PROTECTED_CATEGORY_KEYWORDS) {
             if (normalized.contains(keyword)) {
+                return keyword;
+            }
+        }
+        String lower = normalized.toLowerCase(java.util.Locale.ROOT);
+        for (String keyword : ADULT_QUERY_KEYWORDS) {
+            if (adultKeywordHit(lower, keyword)) {
                 return keyword;
             }
         }
