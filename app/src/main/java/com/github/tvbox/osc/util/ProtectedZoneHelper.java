@@ -46,6 +46,19 @@ public class ProtectedZoneHelper {
     private static final java.util.HashSet<String> ADULT_QUERY_UNLOCKED = new java.util.HashSet<>();
 
     /**
+     * 单字搜索词：用户整个搜索词就一个字「性 / 淫 / 欲」，意图很明确。
+     * 这几个字没法放进上面的关键词表做子串匹配——片名里带「性」的正常片子太多
+     * （性格、个性、慢性、可能性、男性、女性…），一放就会大面积误弹密码。
+     */
+    private static final java.util.HashSet<String> SINGLE_CHAR_ADULT_QUERIES = new java.util.HashSet<>();
+
+    static {
+        SINGLE_CHAR_ADULT_QUERIES.add("性");
+        SINGLE_CHAR_ADULT_QUERIES.add("淫");
+        SINGLE_CHAR_ADULT_QUERIES.add("欲");
+    }
+
+    /**
      * 搜索词命中的成人关键词；不命中返回 null。
      * 去空格（含全角）＋小写后再比较，避免「伦 理」「R18」这类写法绕过。
      */
@@ -55,6 +68,10 @@ public class ProtectedZoneHelper {
         }
         String normalized = text.replace(" ", "").replace("\u3000", "").replace("\t", "")
                 .toLowerCase(java.util.Locale.ROOT);
+        // 单字搜索（如只搜「性」）：整词就是一个字才判命中，避免「性格」这类正常词被连坐
+        if (normalized.length() == 1 && SINGLE_CHAR_ADULT_QUERIES.contains(normalized)) {
+            return normalized;
+        }
         for (String keyword : ADULT_QUERY_KEYWORDS) {
             if (adultKeywordHit(normalized, keyword)) {
                 return keyword;
