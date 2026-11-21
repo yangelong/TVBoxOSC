@@ -97,6 +97,9 @@ public class HomeActivity extends BaseActivity {
     private TextView tvDate;
     private TextView tvName;
     private TvRecyclerView mGridView;
+    /** 「换片源」固定按钮：固定在栏目条最左侧，不跟随栏目列表滚动 */
+    private TextView tvHomeSourceEntry;
+    private boolean homeSourceEntryPaddingApplied = false;
     private NoScrollViewPager mViewPager;
     private SourceViewModel sourceViewModel;
     private SortAdapter sortAdapter;
@@ -214,25 +217,135 @@ public class HomeActivity extends BaseActivity {
         initData();
     }
 
+    /**
+     * 「换片源」固定按钮：原来它是栏目列表的第 0 项，会跟着栏目条一起左右滚动。
+     * 现在挪到列表外面当常驻按钮，列表里的第 0 项隐藏（索引保留，其它下标逻辑不受影响）。
+     */
+    private void setupHomeSourceEntry() {
+        if (tvHomeSourceEntry == null) {
+            return;
+        }
+        tvHomeSourceEntry.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if (hasFocus) {
+                    currentView = v;
+                    isDownOrUp = false;
+                    sortChange = true;
+                    sortFocused = 0;
+                    v.animate().scaleX(1.1f).scaleY(1.1f).setInterpolator(new BounceInterpolator()).setDuration(300).start();
+                    mHandler.removeCallbacks(mDataRunnable);
+                    mHandler.postDelayed(mDataRunnable, 200);
+                } else {
+                    v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(300).start();
+                }
+            }
+        });
+        tvHomeSourceEntry.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (currentSelected == 0) {
+                    // 已经在首页，再点一次就是换片源
+                    showSiteSwitch();
+                } else {
+                    sortFocused = 0;
+                    sortChange = true;
+                    mHandler.removeCallbacks(mDataRunnable);
+                    mHandler.postDelayed(mDataRunnable, 100);
+                }
+            }
+        });
+        // 往右走直接进第 1 个栏目（第 0 项已隐藏，不能让焦点落在空位上）
+        tvHomeSourceEntry.setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (mGridView != null && sortAdapter != null && sortAdapter.getItemCount() > 1) {
+                        mGridView.setSelectedPosition(1);
+                        View itemView = mGridView.getLayoutManager() == null ? null : mGridView.getLayoutManager().findViewByPosition(1);
+                        if (itemView != null) {
+                            itemView.requestFocus();
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+        });
+        // 按钮占了列表左侧的位置，把列表的左边距往右让出来，避免第 1 个栏目被压在按钮下面
+        tvHomeSourceEntry.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int left, int top, int right, int bottom, int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                applyHomeSourceEntryPadding();
+            }
+        });
+        tvHomeSourceEntry.post(new Runnable() {
+            @Override
+            public void run() {
+                applyHomeSourceEntryPadding();
+            }
+        });
+    }
+
+    /** 按钮宽度要等布局出来才知道，只调一次，之后固定 */
+    private void applyHomeSourceEntryPadding() {
+        if (homeSourceEntryPaddingApplied || mGridView == null || tvHomeSourceEntry == null) {
+            return;
+        }
+        int width = tvHomeSourceEntry.getWidth();
+        if (width <= 0) {
+            return;
+        }
+        int baseLeft = mGridView.getPaddingLeft();
+        homeSourceEntryPaddingApplied = true;
+        mGridView.setPadding(baseLeft + width + AutoSizeUtils.dp2px(mContext, 10.0f),
+                mGridView.getPaddingTop(), mGridView.getPaddingRight(), mGridView.getPaddingBottom());
+    }
+
+    /** 回到「换片源」这一栏：焦点交给固定按钮 */
+    private void focusHomeSourceEntry() {
+        sortFocused = 0;
+        if (tvHomeSourceEntry != null) {
+            sortFocusView = tvHomeSourceEntry;
+            tvHomeSourceEntry.requestFocus();
+        }
+    }
+
     private void initView() {
         this.topLayout = findViewById(R.id.topLayout);
         this.tvDate = findViewById(R.id.tvDate);
         this.tvName = findViewById(R.id.tvName);
         this.contentLayout = findViewById(R.id.contentLayout);
         this.mGridView = findViewById(R.id.mGridView);
+        this.tvHomeSourceEntry = findViewById(R.id.tvHomeSourceEntry);
         this.mViewPager = findViewById(R.id.mViewPager);
         this.sortAdapter = new SortAdapter();
         this.mGridView.setLayoutManager(new V7LinearLayoutManager(this.mContext, 0, false));
         this.mGridView.setSpacingWithMargins(0, AutoSizeUtils.dp2px(this.mContext, 10.0f));
         this.mGridView.setAdapter(this.sortAdapter);
+        setupHomeSourceEntry();
         sortAdapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
             @Override
             public void onChanged() {
                 mGridView.post(() -> {
-                    View firstChild = Objects.requireNonNull(mGridView.getLayoutManager()).findViewByPosition(0);
-                    if (firstChild != null) {
-                        mGridView.setSelectedPosition(0);
-                        firstChild.requestFocus();
+                    if (mGridView == null) {
+                        return;
+                    }
+                    int target = Math.max(0, currentSelected);
+                    if (target == 0) {
+                        // 第 0 项（换片源）已经移到列表外的固定按钮上，焦点要给它
+                        if (tvHomeSourceEntry != null) {
+                            tvHomeSourceEntry.requestFocus();
+                        }
+                        return;
+                    }
+                    mGridView.setSelectedPosition(target);
+                    try {
+                        View itemView = Objects.requireNonNull(mGridView.getLayoutManager()).findViewByPosition(target);
+                        if (itemView != null) {
+                            itemView.requestFocus();
+                        }
+                    } catch (Throwable ignored) {
                     }
                 });
             }
@@ -934,14 +1047,14 @@ public class HomeActivity extends BaseActivity {
             }
             // 如果当前不是第一个界面，则将列表设置到第一项
             else if (this.sortFocused != 0) {
-                this.mGridView.setSelection(0);
+                focusHomeSourceEntry();
             } else {
                 doExit();
             }
         } else if (baseLazyFragment instanceof UserFragment && UserFragment.tvHotList.canScrollVertically(-1)) {
             // 如果 UserFragment 列表可以向上滚动，则滚动到顶部
             UserFragment.tvHotList.scrollToPosition(0);
-            this.mGridView.setSelection(0);
+            focusHomeSourceEntry();
         } else {
             doExit();
         }
@@ -1061,9 +1174,7 @@ public class HomeActivity extends BaseActivity {
                 sortFocused = 0;
                 mViewPager.setCurrentItem(0, false);
                 changeTop(false);
-                if (mGridView != null) {
-                    mGridView.setSelectedPosition(0);
-                }
+                focusHomeSourceEntry();
             }
             return;
         }
@@ -1150,9 +1261,7 @@ public class HomeActivity extends BaseActivity {
                 mViewPager.setCurrentItem(0, false);
             }
             changeTop(false);
-            if (mGridView != null) {
-                mGridView.setSelectedPosition(0);
-            }
+            focusHomeSourceEntry();
         } catch (Throwable ignored) {
         }
     }
@@ -1211,7 +1320,17 @@ public class HomeActivity extends BaseActivity {
     private void restoreCategorySelection() {
         sortChange = false;
         sortFocused = currentSelected;
-        if (mGridView != null) {
+        if (currentSelected == 0) {
+            // 第 0 栏已经移到列表外的固定按钮
+            if (tvHomeSourceEntry != null) {
+                tvHomeSourceEntry.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        focusHomeSourceEntry();
+                    }
+                });
+            }
+        } else if (mGridView != null) {
             mGridView.post(new Runnable() {
                 @Override
                 public void run() {
@@ -1222,9 +1341,18 @@ public class HomeActivity extends BaseActivity {
     }
 
     private void showFilterIcon(int count) {
+        if (currentView == null) {
+            return;
+        }
+        // currentView 可能是列表外的「换片源」固定按钮，它没有筛选项，找不到就直接跳过
+        View filterColor = currentView.findViewById(R.id.tvFilterColor);
+        View filter = currentView.findViewById(R.id.tvFilter);
+        if (filterColor == null || filter == null) {
+            return;
+        }
         boolean visible = count > 0;
-        currentView.findViewById(R.id.tvFilterColor).setVisibility(visible ? View.VISIBLE : View.GONE);
-        currentView.findViewById(R.id.tvFilter).setVisibility(visible ? View.GONE : View.VISIBLE);
+        filterColor.setVisibility(visible ? View.VISIBLE : View.GONE);
+        filter.setVisibility(visible ? View.GONE : View.VISIBLE);
     }
 
     private final Runnable mDataRunnable = new Runnable() {

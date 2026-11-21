@@ -26,31 +26,25 @@ public class SortAdapter extends BaseQuickAdapter<MovieSort.SortData, BaseViewHo
         helper.setText(R.id.tvTitle, item.name);
         View itemView = helper.itemView;
         TextView title = helper.getView(R.id.tvTitle);
-        // 「换片源」是固定入口，背景长期高亮，和普通分类区分开
+        // 「换片源」已经做成列表左侧的固定按钮，列表里这一项不再显示（位置保留在索引 0，方便各处的下标逻辑）
         boolean isSourceEntry = item.id != null && item.id.equals("my0");
-        if (isSourceEntry) {
-            itemView.setBackgroundResource(R.drawable.button_home_sort_source);
-            if (title != null) {
-                title.setTextColor(0xFFFFFFFF);
-            }
-        } else {
-            itemView.setBackgroundResource(R.drawable.button_home_sort_focus);
-            if (title != null) {
-                title.setTextColor(0xBBFFFFFF);
-            }
-        }
         // 该分类加载后没有任何数据，把它彻底收成 0 宽并去掉焦点：后面的分类会顶上来，不留空位
-        ViewGroup.LayoutParams params = itemView.getLayoutParams();
-        if (item.hidden) {
+        if (item.hidden || isSourceEntry) {
             itemView.setVisibility(View.GONE);
             itemView.setFocusable(false);
             itemView.setClickable(false);
+            ViewGroup.LayoutParams params = itemView.getLayoutParams();
             if (params != null && params.width != 0) {
                 params.width = 0;
                 itemView.setLayoutParams(params);
             }
             return;
         }
+        itemView.setBackgroundResource(R.drawable.button_home_sort_focus);
+        if (title != null) {
+            title.setTextColor(0xBBFFFFFF);
+        }
+        ViewGroup.LayoutParams params = itemView.getLayoutParams();
         if (params != null && params.width == 0) {
             params.width = ViewGroup.LayoutParams.WRAP_CONTENT;
             itemView.setLayoutParams(params);
