@@ -405,9 +405,6 @@ public class HomeActivity extends BaseActivity {
                         home != null ? home.getKey() : null, newSortData);
                 // 伦理这类保护栏目，在塞进 adapter 之前就先排到最后，保证 tab 和页面顺序一致
                 moveProtectedToEnd(visibleSortData);
-                // 记下这个源的伦理栏目，搜索时要用它去预热「排除名单」
-                ProtectedZoneHelper.putProtectedSort(home != null ? home.getKey() : null,
-                        findProtectedSort(visibleSortData));
                 updateSortData(visibleSortData);
                 initViewPager(absXml);
                 updateHomeRec(absXml);
@@ -874,22 +871,6 @@ public class HomeActivity extends BaseActivity {
         return true;
     }
 
-    /** 从栏目列表里挑出第一条伦理/理论片栏目，供搜索前的「排除名单预热」使用 */
-    private MovieSort.SortData findProtectedSort(List<MovieSort.SortData> data) {
-        if (data == null) {
-            return null;
-        }
-        for (MovieSort.SortData item : data) {
-            if (item == null || item.id == null) {
-                continue;
-            }
-            if (matchedProtectedKeyword(item.name) != null) {
-                return item;
-            }
-        }
-        return null;
-    }
-
     private void updateSortData(List<MovieSort.SortData> newSortData) {
         if (newSortData == null) {
             newSortData = new ArrayList<>();
@@ -1148,6 +1129,8 @@ public class HomeActivity extends BaseActivity {
      */
     private void lockProtectedCategories() {
         UNLOCKED_PROTECTED_KEYWORDS.clear();
+        // 成人关键词的搜索解锁也一起清掉：熄屏回来、换源后要重新输密码
+        ProtectedZoneHelper.lockAdultQueries();
         dismissCategoryPasswordDialog();
         try {
             if (sortAdapter == null || currentSelected <= 0) {
@@ -1183,19 +1166,20 @@ public class HomeActivity extends BaseActivity {
         NumericPasswordDialog dialog = new NumericPasswordDialog(this, sortData.name + " · 需要密码");
         dialog.setOnListener(new NumericPasswordDialog.OnListener() {
             @Override
-            public void onSubmit(String password) {
-                categoryPasswordDialog = null;
+            public boolean onSubmit(String password) {
                 if (PROTECTED_CATEGORY_PASSWORD.equals(password)) {
+                    categoryPasswordDialog = null;
                     UNLOCKED_PROTECTED_KEYWORDS.add(keyword);
                     int position = sortAdapter.getData().indexOf(sortData);
                     sortFocused = position < 0 ? currentSelected : position;
                     sortChange = true;
                     mHandler.removeCallbacks(mDataRunnable);
                     mDataRunnable.run();
-                } else {
-                    Toast.makeText(HomeActivity.this, "密码错误", Toast.LENGTH_SHORT).show();
-                    restoreCategorySelection();
+                    return true;
                 }
+                // 密码不对：框不关（框内自己红字提示），用户直接在键盘上重输
+                restoreCategorySelection();
+                return false;
             }
 
             @Override
@@ -1458,12 +1442,13 @@ public class HomeActivity extends BaseActivity {
         final NumericPasswordDialog dialog = new NumericPasswordDialog(this, value.getName() + " · 需要密码");
         dialog.setOnListener(new NumericPasswordDialog.OnListener() {
             @Override
-            public void onSubmit(String password) {
+            public boolean onSubmit(String password) {
                 if (PROTECTED_CATEGORY_PASSWORD.equals(password)) {
                     applyHomeSource(value);
-                } else {
-                    Toast.makeText(HomeActivity.this, "密码错误", Toast.LENGTH_SHORT).show();
+                    return true;
                 }
+                // 密码不对：框不关（框内自己红字提示），用户直接重输
+                return false;
             }
 
             @Override

@@ -115,10 +115,6 @@ public class SearchHelper {
             if (ProtectedZoneHelper.isSearchBlockedSource(video.sourceKey)) {
                 continue;
             }
-            // 伦理/理论片、国外频道里出现过的影片 id 直接排掉（站点搜索接口不区分栏目，只能按 id 黑名单）
-            if (ProtectedIdStore.contains(video.sourceKey, video.id)) {
-                continue;
-            }
             result.add(video);
         }
         return result;

@@ -32,9 +32,9 @@ import com.github.tvbox.osc.event.ServerEvent;
 import com.github.tvbox.osc.ui.adapter.FastListAdapter;
 import com.github.tvbox.osc.ui.adapter.FastSearchAdapter;
 import com.github.tvbox.osc.ui.adapter.SearchWordAdapter;
+import com.github.tvbox.osc.ui.dialog.NumericPasswordDialog;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HistoryHelper;
-import com.github.tvbox.osc.util.ProtectedSearchWarmup;
 import com.github.tvbox.osc.util.ProtectedZoneHelper;
 import com.github.tvbox.osc.util.SearchHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
@@ -99,7 +99,7 @@ public class FastSearchActivity extends BaseActivity {
     private int wordListVersion = 0;
     private String selectedWordName = "";
     private HashMap<String, String> mCheckSources = null;
-    private ProtectedSearchWarmup warmup = null;
+    private NumericPasswordDialog searchPasswordDialog = null;
 
     @Override
     protected int getLayoutResID() {
@@ -263,10 +263,6 @@ public class FastSearchActivity extends BaseActivity {
         sourceViewModel.listResult.observe(this, new androidx.lifecycle.Observer<AbsXml>() {
             @Override
             public void onChanged(AbsXml data) {
-                // 搜索前的保护区预热：这几页结果只用来记 id，不更新界面
-                if (warmup != null && warmup.handleResult(data)) {
-                    return;
-                }
                 if (!folderLoading) return;
                 folderLoading = false;
                 if (data == null || data.movie == null || data.movie.videoList == null) {
@@ -567,6 +563,12 @@ public class FastSearchActivity extends BaseActivity {
     }
 
     private void search(String title) {
+        // 搜成人/伦理类关键词：先要密码，密码对了才真正发起搜索
+        String adultKeyword = ProtectedZoneHelper.matchedAdultQuery(title);
+        if (adultKeyword != null && !ProtectedZoneHelper.isAdultQueryUnlocked(adultKeyword)) {
+            showSearchPasswordDialog(title, adultKeyword);
+            return;
+        }
         cancel();
         showLoading();
         // 去掉搜索词里的空格，避免站点把它当成多个关键词
@@ -590,28 +592,37 @@ public class FastSearchActivity extends BaseActivity {
         //写入历史记录
         HistoryHelper.setSearchHistory(title);
 
-        // 搜索前先把伦理栏目前几页抓进「排除名单」（只在这个源第一次搜索时做）
-        if (startProtectedWarmup()) {
-            updateSearchStatus();
-            return;
-        }
         searchResult();
     }
 
-    /** 返回 true 表示正在预热，等预热结束的 onDone 里再真正开搜 */
-    private boolean startProtectedWarmup() {
-        if (warmup == null) {
-            warmup = new ProtectedSearchWarmup(sourceViewModel, new Runnable() {
-                @Override
-                public void run() {
-                    if (isFinishing() || mGridView == null) {
-                        return;
-                    }
-                    searchResult();
-                }
-            });
+    /** 搜到成人/伦理类词时的密码框：输对了才继续搜，输错不关框 */
+    private void showSearchPasswordDialog(final String title, final String keyword) {
+        if (isFinishing()) {
+            return;
         }
-        return warmup.startIfNeeded();
+        if (searchPasswordDialog != null && searchPasswordDialog.isShowing()) {
+            return;
+        }
+        final NumericPasswordDialog dialog = new NumericPasswordDialog(this, "成人内容 · 需要密码");
+        dialog.setOnListener(new NumericPasswordDialog.OnListener() {
+            @Override
+            public boolean onSubmit(String password) {
+                if (ProtectedZoneHelper.PROTECTED_PASSWORD.equals(password)) {
+                    searchPasswordDialog = null;
+                    ProtectedZoneHelper.unlockAdultQuery(keyword);
+                    search(title);
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public void onCancel() {
+                searchPasswordDialog = null;
+            }
+        });
+        searchPasswordDialog = dialog;
+        dialog.show();
     }
 
     private ExecutorService searchExecutorService = null;

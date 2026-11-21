@@ -1,7 +1,6 @@
 package com.github.tvbox.osc.util;
 
 import com.github.tvbox.osc.api.ApiConfig;
-import com.github.tvbox.osc.bean.MovieSort;
 import com.github.tvbox.osc.bean.SourceBean;
 import com.orhanobut.hawk.Hawk;
 
@@ -18,27 +17,60 @@ public class ProtectedZoneHelper {
     private static final String[] PROTECTED_CATEGORY_KEYWORDS = {"伦理", "倫理", "理论", "理論"};
     /** 站点/频道名里出现这些词，整站内容不进搜索结果 */
     private static final String[] PROTECTED_SOURCE_NAME_KEYWORDS = {"国外频道", "伦理", "倫理", "理论", "理論"};
-    /** 首页加载完栏目后，这里留一份伦理栏目的信息，搜索预热时用它去抓页 */
-    private static String cachedSortSourceKey;
-    private static MovieSort.SortData cachedProtectedSort;
 
-    public static void putProtectedSort(String sourceKey, MovieSort.SortData sortData) {
-        if (sourceKey == null || sourceKey.isEmpty()) {
-            return;
-        }
-        if (sourceKey.equals(cachedSortSourceKey) && sortData == null) {
-            // 换了源但新源没有伦理栏目，把旧的清掉
-            cachedProtectedSort = null;
-        }
-        cachedSortSourceKey = sourceKey;
-        cachedProtectedSort = sortData;
-    }
+    /** 保护区统一口令（伦理栏目、国外频道、成人搜索都用这个） */
+    public static final String PROTECTED_PASSWORD = "104";
 
-    public static MovieSort.SortData getProtectedSort(String sourceKey) {
-        if (sourceKey == null || !sourceKey.equals(cachedSortSourceKey)) {
+    /**
+     * 搜索词里出现这些词，说明是在找成人/伦理类内容：先要密码，密码对了才真正发起搜索。
+     * 只放「一眼就能确定」的词，避免误伤正常片名。
+     */
+    private static final String[] ADULT_QUERY_KEYWORDS = {
+            "伦理", "倫理", "理论", "理論",
+            "成人", "成人片", "情色", "色情", "黄色", "黃色",
+            "三级", "三級", "限制级", "限制級",
+            "无码", "無碼", "有码", "有碼",
+            "里番", "番号", "番號",
+            "麻豆", "果冻传媒", "果凍傳媒", "天美传媒", "天美傳媒",
+            "星空传媒", "星空傳媒", "蜜桃传媒", "蜜桃傳媒",
+            "swag", "jvid", "onlyfans", "porn", "hentai", "r18", "18禁", "18+",
+            "a片", "禁片", "av女优", "av女優"
+    };
+
+    /** 本次进程里已经输对密码的成人搜索关键词，不用每次再问 */
+    private static final java.util.HashSet<String> ADULT_QUERY_UNLOCKED = new java.util.HashSet<>();
+
+    /**
+     * 搜索词命中的成人关键词；不命中返回 null。
+     * 去空格（含全角）＋小写后再比较，避免「伦 理」「R18」这类写法绕过。
+     */
+    public static String matchedAdultQuery(String text) {
+        if (text == null || text.isEmpty()) {
             return null;
         }
-        return cachedProtectedSort;
+        String normalized = text.replace(" ", "").replace("\u3000", "").replace("\t", "")
+                .toLowerCase(java.util.Locale.ROOT);
+        for (String keyword : ADULT_QUERY_KEYWORDS) {
+            if (normalized.contains(keyword)) {
+                return keyword;
+            }
+        }
+        return null;
+    }
+
+    public static boolean isAdultQueryUnlocked(String keyword) {
+        return keyword != null && ADULT_QUERY_UNLOCKED.contains(keyword);
+    }
+
+    public static void unlockAdultQuery(String keyword) {
+        if (keyword != null && !keyword.isEmpty()) {
+            ADULT_QUERY_UNLOCKED.add(keyword);
+        }
+    }
+
+    /** 重新上锁（退出 App / 换源时调） */
+    public static void lockAdultQueries() {
+        ADULT_QUERY_UNLOCKED.clear();
     }
 
     /** 命中的保护关键字，没命中返回 null；名字做了去空格/全角空格处理 */

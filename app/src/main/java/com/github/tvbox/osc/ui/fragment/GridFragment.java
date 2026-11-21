@@ -37,7 +37,6 @@ import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.ImgUtil;
 import com.github.tvbox.osc.util.LOG;
-import com.github.tvbox.osc.util.ProtectedIdStore;
 import com.github.tvbox.osc.util.ProtectedRecentHelper;
 import com.github.tvbox.osc.util.ProtectedZoneHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
@@ -111,16 +110,6 @@ public class GridFragment extends BaseLazyFragment {
             return true;
         }
         return sortData != null && ProtectedZoneHelper.isProtectedCategoryName(sortData.name);
-    }
-
-    /** 当前首页站点 key，用来给保护区的影片 id 归类 */
-    private String homeSourceKey() {
-        try {
-            SourceBean home = ApiConfig.get().getHomeSourceBean();
-            return home == null ? null : home.getKey();
-        } catch (Throwable ignored) {
-            return null;
-        }
     }
 
     @Override
@@ -454,8 +443,6 @@ public class GridFragment extends BaseLazyFragment {
                         isLoad = true;
                         List<Movie.Video> videos = absXml.movie.videoList;
                         if (isProtectedCategory()) {
-                            // 伦理/理论片、国外频道：把这些影片 id 记进搜索排除名单
-                            ProtectedIdStore.markAll(homeSourceKey(), videos);
                             // 伦理栏目：最近看过的影片排到最前面
                             videos = ProtectedRecentHelper.reorder(videos);
                         }
@@ -469,10 +456,6 @@ public class GridFragment extends BaseLazyFragment {
                             }
                         }
                     } else {
-                        if (isProtectedCategory()) {
-                            // 翻页看到的也一起记，搜索排除名单越往后越全
-                            ProtectedIdStore.markAll(homeSourceKey(), absXml.movie.videoList);
-                        }
                         hasActionItems = hasActionItems || hasActionVideo(absXml.movie.videoList);
                         gridAdapter.addData(absXml.movie.videoList);
                     }

@@ -835,8 +835,6 @@ public class ModelSettingFragment extends BaseLazyFragment {
             SourceViewModel.clearRuntimeCache();
             // 清缓存也把「空栏目」记录一起清掉，让栏目重新判定一次
             com.github.tvbox.osc.util.EmptyCategoryStore.clearAll();
-            // 保护区影片 id 黑名单同样重置（换了源/清了缓存就重新记）
-            com.github.tvbox.osc.util.ProtectedIdStore.clearAll();
 //            FileUtils.clearSpiderCacheFiles();
             LOG.i("echo-clear-config-switch-cache");
         } catch (Exception e) {
@@ -880,12 +878,13 @@ public class ModelSettingFragment extends BaseLazyFragment {
         final NumericPasswordDialog dialog = new NumericPasswordDialog(mActivity, "国外频道 · 需要密码");
         dialog.setOnListener(new NumericPasswordDialog.OnListener() {
             @Override
-            public void onSubmit(String password) {
+            public boolean onSubmit(String password) {
                 if (PROTECTED_API_LINE_PASSWORD.equals(password)) {
                     applyApiLine(value);
-                } else {
-                    Toast.makeText(mContext, "密码错误", Toast.LENGTH_SHORT).show();
+                    return true;
                 }
+                // 密码不对：框不关（框内自己红字提示），用户直接重输
+                return false;
             }
 
             @Override
