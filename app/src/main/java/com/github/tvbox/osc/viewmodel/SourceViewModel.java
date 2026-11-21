@@ -244,6 +244,91 @@ public class SourceViewModel extends ViewModel {
         getSort(sourceKey);
     }
 
+    /**
+     * 拉某个源的栏目列表（type 0/1，走接口直连）。
+     * 站点返回 JSON 还是 XML 都按实际内容解析；一次拿不到栏目就换个地址再试一次（有的采集站裸地址不给 class，带 ac=list 才给）。
+     */
+    private void requestSortByApi(final String sourceKey, final SourceBean sourceBean, final int type,
+                                  final String apiUrl, final boolean retried, final boolean skipHomeRec) {
+        OkGo.<String>get(apiUrl)
+                .tag(sourceKey + "_sort")
+                .execute(new AbsCallback<String>() {
+                    @Override
+                    public String convertResponse(okhttp3.Response response) throws Throwable {
+                        if (response.body() != null) {
+                            return response.body().string();
+                        } else {
+                            throw new IllegalStateException("网络请求错误");
+                        }
+                    }
+
+                    @Override
+                    public void onSuccess(Response<String> response) {
+                        String body = response.body();
+                        if (body == null) {
+                            body = "";
+                        }
+                        String trimmed = body.trim();
+                        AbsSortXml sortXml;
+                        if (type == 0) {
+                            sortXml = sortXml(sortResult, body);
+                        } else {
+                            // 别管它标称什么格式：真给 XML 就按 XML 解析，否则按 JSON
+                            sortXml = trimmed.startsWith("<") ? sortXml(sortResult, trimmed) : sortJson(sortResult, trimmed);
+                        }
+                        if (isEmptySort(sortXml) && !retried) {
+                            requestSortByApi(sourceKey, sourceBean, type, retryApiUrl(apiUrl), true, skipHomeRec);
+                            return;
+                        }
+                        attachSortSource(sourceKey, sortXml);
+                        if (sortXml != null && !skipHomeRec && Hawk.get(HawkConfig.HOME_REC, HawkConfig.DEFAULT_HOME_REC) == 1 && sortXml.list != null && sortXml.list.videoList != null && sortXml.list.videoList.size() > 0) {
+                            ArrayList<String> ids = new ArrayList<>();
+                            for (Movie.Video vod : sortXml.list.videoList) {
+                                ids.add(vod.id);
+                            }
+                            final AbsSortXml finalSortXml = sortXml;
+                            getHomeRecList(sourceBean, ids, new HomeRecCallback() {
+                                @Override
+                                public void done(List<Movie.Video> videos) {
+                                    finalSortXml.videoList = videos;
+                                    postSortResult(sourceKey, finalSortXml);
+                                    cacheSort(sourceKey, finalSortXml);
+                                }
+                            });
+                        } else {
+                            postSortResult(sourceKey, sortXml);
+                            cacheSort(sourceKey, sortXml);
+                        }
+                    }
+
+                    @Override
+                    public void onError(Response<String> response) {
+                        super.onError(response);
+                        // 连不上/超时也先换地址再试一次，别一下子就把这个源判死
+                        if (!retried) {
+                            requestSortByApi(sourceKey, sourceBean, type, retryApiUrl(apiUrl), true, skipHomeRec);
+                            return;
+                        }
+                        postSortResult(sourceKey, null);
+                    }
+                });
+    }
+
+    private static boolean isEmptySort(AbsSortXml sortXml) {
+        return sortXml == null || sortXml.classes == null || sortXml.classes.sortList == null
+                || sortXml.classes.sortList.isEmpty();
+    }
+
+    private static String retryApiUrl(String apiUrl) {
+        if (apiUrl == null) {
+            return apiUrl;
+        }
+        if (apiUrl.contains("ac=list")) {
+            return apiUrl;
+        }
+        return apiUrl + (apiUrl.contains("?") ? "&" : "?") + "ac=list";
+    }
+
     // homeContent
     public void getSort(final String sourceKey) {
         if (sourceKey == null) {
@@ -342,55 +427,7 @@ public class SourceViewModel extends ViewModel {
             };
             httpPrepareThreadPool.execute(waitResponse);
         } else if (type == 0 || type == 1) {
-            OkGo.<String>get(sourceBean.getApi())
-                    .tag(sourceBean.getKey() + "_sort")
-                    .execute(new AbsCallback<String>() {
-                        @Override
-                        public String convertResponse(okhttp3.Response response) throws Throwable {
-                            if (response.body() != null) {
-                                return response.body().string();
-                            } else {
-                                throw new IllegalStateException("网络请求错误");
-                            }
-                        }
-
-                        @Override
-                        public void onSuccess(Response<String> response) {
-                            AbsSortXml sortXml = null;
-                            if (type == 0) {
-                                String xml = response.body();
-                                sortXml = sortXml(sortResult, xml);
-                            } else if (type == 1) {
-                                String json = response.body();
-                                sortXml = sortJson(sortResult, json);
-                            }
-                            attachSortSource(sourceKey, sortXml);
-                            if (sortXml != null && !skipHomeRec && Hawk.get(HawkConfig.HOME_REC, HawkConfig.DEFAULT_HOME_REC) == 1 && sortXml.list != null && sortXml.list.videoList != null && sortXml.list.videoList.size() > 0) {
-                                ArrayList<String> ids = new ArrayList<>();
-                                for (Movie.Video vod : sortXml.list.videoList) {
-                                    ids.add(vod.id);
-                                }
-                                final AbsSortXml finalSortXml = sortXml;
-                                getHomeRecList(sourceBean, ids, new HomeRecCallback() {
-                                    @Override
-                                    public void done(List<Movie.Video> videos) {
-                                        finalSortXml.videoList = videos;
-                                        postSortResult(sourceKey, finalSortXml);
-                                        cacheSort(sourceKey, finalSortXml);
-                                    }
-                                });
-                            } else {
-                                postSortResult(sourceKey, sortXml);
-                                cacheSort(sourceKey, sortXml);
-                            }
-                        }
-
-                        @Override
-                        public void onError(Response<String> response) {
-                            super.onError(response);
-                            postSortResult(sourceKey, null);
-                        }
-                    });
+            requestSortByApi(sourceKey, sourceBean, type, sourceBean.getApi(), false, skipHomeRec);
         }else if (type == 4) {
             String extend=sourceBean.getExt();
             extend=getFixUrl(extend);

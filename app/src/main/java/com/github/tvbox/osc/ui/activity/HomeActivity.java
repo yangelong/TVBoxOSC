@@ -543,6 +543,7 @@ public class HomeActivity extends BaseActivity {
                     if (failedKey == null && home != null) {
                         failedKey = home.getKey();
                     }
+                    skipReason = "返回不了栏目";
                     skipBrokenSource(failedKey);
                     return;
                 }
@@ -720,9 +721,10 @@ public class HomeActivity extends BaseActivity {
         }, this);
     }
 
-    private static final long SOURCE_SWITCH_TIMEOUT_MS = 12000L;
+    /** 切换数据源卡住超过 25 秒（含一次换地址重试），就当成这个源是坏的，自动换下一个 */
+    private static final long SOURCE_SWITCH_TIMEOUT_MS = 25000L;
     private static final String DEAD_HOME_SOURCE_KEY = "home_dead_source_map";
-    private static final long DEAD_HOME_SOURCE_TTL_MS = 6L * 60 * 60 * 1000;
+    private static final long DEAD_HOME_SOURCE_TTL_MS = 30L * 60 * 1000;
     /** 冷启动默认切到这个数据源 */
     private static final String STARTUP_DEFAULT_SOURCE_KEYWORD = "极速频道";
     private static boolean startupSourceApplied = false;
@@ -740,6 +742,7 @@ public class HomeActivity extends BaseActivity {
                 return;
             }
             markDeadHomeSource(key);
+            skipReason = "长时间无响应";
             skipBrokenSource(key);
         }
     };
@@ -800,6 +803,8 @@ public class HomeActivity extends BaseActivity {
     }
 
     /** 目标源打不开/没有栏目时，自动顺着列表找下一个能用的源 */
+    private String skipReason = "无响应";
+
     private void skipBrokenSource(String failedKey) {
         mHandler.removeCallbacks(sourceSwitchWatchdog);
         homeSortLoading = false;
@@ -810,7 +815,7 @@ public class HomeActivity extends BaseActivity {
         SourceBean current = ApiConfig.get().getHomeSourceBean();
         if (sites == null || sites.size() <= 1 || current == null) {
             // 只有一个数据源，没得替补，退回原来的
-            Toast.makeText(HomeActivity.this, "该数据源暂无内容，已退回原数据源", Toast.LENGTH_SHORT).show();
+            Toast.makeText(HomeActivity.this, "该数据源" + skipReason + "，已退回原数据源", Toast.LENGTH_SHORT).show();
             cancelHomeSortLoading();
             return;
         }
@@ -838,7 +843,7 @@ public class HomeActivity extends BaseActivity {
                 continue;
             }
             String nextName = next.getName() == null ? "下一个数据源" : next.getName();
-            Toast.makeText(HomeActivity.this, "该数据源暂无内容，已切到「" + nextName + "」", Toast.LENGTH_SHORT).show();
+            Toast.makeText(HomeActivity.this, "该数据源" + skipReason + "，已切到「" + nextName + "」", Toast.LENGTH_SHORT).show();
             previousHomeSource = previous;
             ApiConfig.get().setSourceBean(next);
             refreshHome(false);

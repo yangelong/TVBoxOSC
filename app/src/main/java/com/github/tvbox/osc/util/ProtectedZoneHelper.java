@@ -39,7 +39,7 @@ public class ProtectedZoneHelper {
             "果凍傳媒", "天美传媒", "天美傳媒", "星空传媒", "星空傳媒", "蜜桃传媒", "蜜桃傳媒", "蜜桃", "SWAG", "JVID",
             "OnlyFans", "Porn", "Hentai", "R18", "FC2", "一本道", "东京热", "東京熱", "加勒比", "流出",
             "无套", "黑丝", "丝袜", "情趣", "美少女", "大奶", "御姐", "NTR", "口交", "露出",
-            "走光", "10musume", "1pondo", "heyzo", "caribbeancom", "探花", "寻花"
+            "走光", "10musume", "1pondo", "heyzo", "caribbeancom", "探花", "寻花", "福利"
     };
 
     /** 本次进程里已经输对密码的成人搜索关键词，不用每次再问 */
