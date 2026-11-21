@@ -238,6 +238,11 @@ public class FastSearchActivity extends BaseActivity {
             @Override
             public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
                 String str = searchWordAdapter.getData().get(position);
+                if (str != null && !str.isEmpty()) {
+                    // 记下这次实际搜的词，回到搜索页时把搜索框换成它（原来会一直显示 bpb 这种缩写）
+                    SearchActivity.pendingSearchWord = str;
+                    SearchActivity.setPendingSearchWordTime(System.currentTimeMillis());
+                }
                 search(str);
             }
         });

@@ -117,6 +117,14 @@ public class SearchActivity extends BaseActivity {
     private PinyinAdapter wordAdapter;
     private PinyinAdapter hotWordAdapter;
     private String searchTitle = "";
+    /** 搜索结果页点了候选词后，把这个词带回搜索页、替换搜索框里的内容（带时间戳，避免很久以后打开搜索页还被旧词占着） */
+    public static String pendingSearchWord = null;
+    private static long pendingSearchWordTime = 0L;
+
+    /** 搜索结果页点候选词时记一下时间，回到搜索页只认 10 分钟以内的 */
+    public static void setPendingSearchWordTime(long time) {
+        pendingSearchWordTime = time;
+    }
     private TextView tvSearchCheckboxBtn;
 
     private static HashMap<String, String> mCheckSources = null;
@@ -147,6 +155,13 @@ public class SearchActivity extends BaseActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // 在搜索结果页点了候选词（改搜别的词）之后返回，把搜索框同步成那个词，方便继续改
+        if (pendingSearchWord != null && etSearch != null
+                && System.currentTimeMillis() - pendingSearchWordTime < 10 * 60 * 1000L) {
+            etSearch.setText(pendingSearchWord);
+            etSearch.setSelection(etSearch.getText().length());
+            pendingSearchWord = null;
+        }
         if (searchPaused) {
             resumePausedSearches();
         }
@@ -392,6 +407,12 @@ public class SearchActivity extends BaseActivity {
     private void startSearch(String wd) {
         if (TextUtils.isEmpty(wd)) {
             return;
+        }
+        // 点了候选词/历史词：先把搜索框里的拼音缩写（比如 bpb）换成选中的完整片名，
+        // 这样搜完回来还能在这个基础上改一改再搜
+        if (etSearch != null) {
+            etSearch.setText(wd);
+            etSearch.setSelection(wd.length());
         }
         if (Hawk.get(HawkConfig.FAST_SEARCH_MODE, true)) {
             Bundle bundle = new Bundle();
