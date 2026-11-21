@@ -255,18 +255,23 @@ public class HomeActivity extends BaseActivity {
                 }
             }
         });
-        // 往右走直接进第 1 个栏目（第 0 项已隐藏，不能让焦点落在空位上）
+        // 往右走直接进第一个可见栏目（第 0 项已隐藏，不能让焦点落在空位上）
         tvHomeSourceEntry.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View v, int keyCode, KeyEvent event) {
                 if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    if (mGridView != null && sortAdapter != null && sortAdapter.getItemCount() > 1) {
-                        mGridView.setSelectedPosition(1);
-                        View itemView = mGridView.getLayoutManager() == null ? null : mGridView.getLayoutManager().findViewByPosition(1);
+                    int target = firstVisibleCategoryPosition();
+                    if (mGridView != null && target > 0) {
+                        mGridView.setSelectedPosition(target);
+                        View itemView = mGridView.getLayoutManager() == null ? null : mGridView.getLayoutManager().findViewByPosition(target);
                         if (itemView != null) {
                             itemView.requestFocus();
-                            return true;
+                        } else {
+                            // 还没布局出来：先滚过去、把焦点交给列表，避免按右键没反应
+                            mGridView.scrollToPosition(target);
+                            mGridView.requestFocus();
                         }
+                        return true;
                     }
                 }
                 return false;
@@ -300,6 +305,20 @@ public class HomeActivity extends BaseActivity {
         homeSourceEntryPaddingApplied = true;
         mGridView.setPadding(baseLeft + width + AutoSizeUtils.dp2px(mContext, 10.0f),
                 mGridView.getPaddingTop(), mGridView.getPaddingRight(), mGridView.getPaddingBottom());
+    }
+
+    /** 第一个真正显示出来的栏目位置（跳过隐藏的「换片源」和空栏目），没有就返回 -1 */
+    private int firstVisibleCategoryPosition() {
+        if (sortAdapter == null || sortAdapter.getData() == null) {
+            return -1;
+        }
+        for (int i = 1; i < sortAdapter.getData().size(); i++) {
+            MovieSort.SortData sortData = sortAdapter.getData().get(i);
+            if (sortData != null && !sortData.hidden) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** 回到「换片源」这一栏：焦点交给固定按钮 */
@@ -398,14 +417,31 @@ public class HomeActivity extends BaseActivity {
 
             @Override
             public void onItemClick(TvRecyclerView parent, View itemView, int position) {
-                if (itemView != null && currentSelected == position) {
+                if (itemView == null) {
+                    return;
+                }
+                if (currentSelected == position) {
                     BaseLazyFragment baseLazyFragment = fragments.get(currentSelected);
                     if ((baseLazyFragment instanceof GridFragment) && !sortAdapter.getItem(position).filters.isEmpty()) {// 弹出筛选
                         ((GridFragment) baseLazyFragment).showFilter();
                     } else if (baseLazyFragment instanceof UserFragment) {
                         showSiteSwitch();
                     }
+                    return;
                 }
+                // 点到别的栏目：不再等「焦点停 200ms」那套，点完立刻切过去（有的栏目焦点切换不生效时，点了像没反应）
+                if (position >= fragments.size()) {
+                    return;
+                }
+                MovieSort.SortData sortData = sortAdapter.getItem(position);
+                if (sortData != null && sortData.hidden) {
+                    return;
+                }
+                sortFocused = position;
+                sortFocusView = itemView;
+                sortChange = true;
+                mHandler.removeCallbacks(mDataRunnable);
+                mHandler.post(mDataRunnable);
             }
         });
 
